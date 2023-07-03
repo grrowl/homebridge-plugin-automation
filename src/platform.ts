@@ -10,9 +10,6 @@ import {
 } from 'homebridge';
 import { Socket, io } from 'socket.io-client';
 import { PLUGIN_NAME, UPSTREAM_API } from './settings';
-import _debug from 'debug';
-
-const debug = _debug(PLUGIN_NAME);
 
 // Define the message types
 interface DeviceStatusMessage<T> {
@@ -47,16 +44,11 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     public readonly config: PlatformConfig,
     public readonly api: HomebridgeAPI,
   ) {
-    debug('AI: Preparing for launch...');
+    this.log.info('AI: Preparing for launch...');
     this.api.on('didFinishLaunching', () => {
-      debug('AI: Launching...');
+      this.log.info('AI: Launching...');
       this.connectSocket();
-      // Assuming that the 'hap' object has a 'bridge' property
-      const bridge = (this.api.hap as any).bridge;
-      bridge.on('accessory-register', (accessory: PlatformAccessory) => {
-        debug(`Reigstred accessory ${accessory.displayName}`);
-        this.configureAccessory(accessory);
-      });
+      // TODO: connect to HAP API using info from api variable
     });
   }
 
@@ -65,27 +57,11 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
     this.socket.on('connect', () => {
       this.reconnectAttempts = 0; // reset reconnect attempts
-      // Send the status of all devices when the connection is established
-      const bridge = (this.api.hap as any).bridge;
-      bridge.bridgedAccessories.forEach((accessory: PlatformAccessory) => {
-        accessory.services.forEach((service: Service) => {
-          service.characteristics.forEach((characteristic: Characteristic) => {
-            const message = createMessage(accessory, service, characteristic);
-            this.socket?.emit('deviceStatus', message);
-          });
-        });
-      });
+      // TODO: send status of all devices when the connection is established
     });
 
     this.socket.on('deviceStatus', (message: DeviceStatusMessage<CharacteristicValue | null | undefined>) => {
-      // Update the device properties when a message is received from the upstream API
-      const bridge = (this.api.hap as any).bridge;
-      const accessory = bridge.bridgedAccessories.find(
-        (accessory: PlatformAccessory) => accessory.UUID === message.id,
-      );
-      const service = accessory?.getService(message.type);
-      const characteristic = service?.getCharacteristic(message.characteristic);
-      characteristic?.updateValue(message.value!);
+      // TODO: Update the device properties when a message is received from the upstream API
     });
 
     this.socket.on('connect_error', (error) => {
@@ -106,17 +82,6 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   }
 
   configureAccessory(accessory: PlatformAccessory): void {
-    // Setup event listeners for accessory changes
-    accessory.services.forEach((service: Service) => {
-      service.characteristics.forEach((characteristic: Characteristic) => {
-        characteristic.on('change', ({ oldValue, newValue }) => {
-          // Send a WebSocket message to the upstream API when the device status changes
-          if (oldValue !== newValue) {
-            const message = createMessage(accessory, service, characteristic);
-            this.socket?.emit('deviceStatus', message);
-          }
-        });
-      });
-    });
+    // TODO: Setup event listeners for accessory changes. Do not implement if this will only be called for this plugin's accessories
   }
 }
