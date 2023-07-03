@@ -1,3 +1,14 @@
+# homebridge-plugin-ai
+
+Control your homebridge instance from AI.
+
+## testing
+
+```shell
+docker run --name=homebridge-ai -p 18581:8581 -v $(pwd)/homebridge:/homebridge -v $(pwd):/var/lib/homebridge-plugin-ai homebridge/homebridge:latest; docker rm homebridge-ai
+```
+
+---
 
 <p align="center">
 
@@ -52,7 +63,7 @@ When you are ready to publish the plugin you should set `private` to false, or r
 Open the [`src/settings.ts`](./src/settings.ts) file and change the default values:
 
 * `PLATFORM_NAME` - Set this to be the name of your platform. This is the name of the platform that users will use to register the plugin in the Homebridge `config.json`.
-* `PLUGIN_NAME` - Set this to be the same name you set in the [`package.json`](./package.json) file. 
+* `PLUGIN_NAME` - Set this to be the same name you set in the [`package.json`](./package.json) file.
 
 Open the [`config.schema.json`](./config.schema.json) file and change the following attribute:
 

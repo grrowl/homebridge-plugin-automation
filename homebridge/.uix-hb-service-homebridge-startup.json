@@ -1,0 +1,8 @@
+{
+    "debugMode": true,
+    "keepOrphans": false,
+    "insecureMode": true,
+    "env": {
+        "DEBUG": "socket.io:client*,homebridge-plugin-ai"
+    }
+}

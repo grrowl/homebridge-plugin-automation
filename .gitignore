@@ -117,4 +117,7 @@ dist
 .yarn/cache
 .yarn/unplugged
 .yarn/build-state.yml
-.pnp.*
+.pnp.*homebridge
+
+# test instance directory
+homebridge/
