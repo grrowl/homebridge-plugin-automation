@@ -1,9 +1,9 @@
 {
   "private": true,
-  "displayName": "Plugin Name",
-  "name": "homebridge-plugin-name",
+  "displayName": "HomebridgeAI",
+  "name": "homebridge-plugin-ai",
   "version": "1.0.0",
-  "description": "A short description about what your plugin does.",
+  "description": "Bring AI control to your home",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -26,7 +26,10 @@
   "keywords": [
     "homebridge-plugin"
   ],
-  "dependencies": {},
+  "dependencies": {
+    "debug": "^4.3.4",
+    "socket.io-client": "^4.7.1"
+  },
   "devDependencies": {
     "@types/node": "^16.10.9",
     "@typescript-eslint/eslint-plugin": "^5.0.0",

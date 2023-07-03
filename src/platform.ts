@@ -1,116 +1,122 @@
-import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
+import {
+  Characteristic,
+  CharacteristicValue,
+  DynamicPlatformPlugin,
+  API as HomebridgeAPI,
+  Logger,
+  PlatformAccessory,
+  PlatformConfig,
+  Service,
+} from 'homebridge';
+import { Socket, io } from 'socket.io-client';
+import { PLUGIN_NAME, UPSTREAM_API } from './settings';
+import _debug from 'debug';
 
-import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
-import { ExamplePlatformAccessory } from './platformAccessory';
+const debug = _debug(PLUGIN_NAME);
 
-/**
- * HomebridgePlatform
- * This class is the main constructor for your plugin, this is where you should
- * parse the user config and discover/register accessories with Homebridge.
- */
-export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
-  public readonly Service: typeof Service = this.api.hap.Service;
-  public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
+// Define the message types
+interface DeviceStatusMessage<T> {
+  id: string;
+  type: string;
+  characteristic: string;
+  value: T;
+  version: number;
+}
 
-  // this is used to track restored cached accessories
-  public readonly accessories: PlatformAccessory[] = [];
+// Abstract the message creation
+function createMessage(
+  accessory: PlatformAccessory,
+  service: Service,
+  characteristic: Characteristic,
+): DeviceStatusMessage<CharacteristicValue | null | undefined> {
+  return {
+    id: accessory.UUID,
+    type: service.UUID,
+    characteristic: characteristic.UUID,
+    value: characteristic.value,
+    version: 1,
+  };
+}
+
+export class HomebridgeAI implements DynamicPlatformPlugin {
+  private socket: Socket | undefined;
+  private reconnectAttempts = 0;
 
   constructor(
     public readonly log: Logger,
     public readonly config: PlatformConfig,
-    public readonly api: API,
+    public readonly api: HomebridgeAPI,
   ) {
-    this.log.debug('Finished initializing platform:', this.config.name);
-
-    // When this event is fired it means Homebridge has restored all cached accessories from disk.
-    // Dynamic Platform plugins should only register new accessories after this event was fired,
-    // in order to ensure they weren't added to homebridge already. This event can also be used
-    // to start discovery of new accessories.
+    debug('AI: Preparing for launch...');
     this.api.on('didFinishLaunching', () => {
-      log.debug('Executed didFinishLaunching callback');
-      // run the method to discover / register your devices as accessories
-      this.discoverDevices();
+      debug('AI: Launching...');
+      this.connectSocket();
+      // Assuming that the 'hap' object has a 'bridge' property
+      const bridge = (this.api.hap as any).bridge;
+      bridge.on('accessory-register', (accessory: PlatformAccessory) => {
+        debug(`Reigstred accessory ${accessory.displayName}`);
+        this.configureAccessory(accessory);
+      });
     });
   }
 
-  /**
-   * This function is invoked when homebridge restores cached accessories from disk at startup.
-   * It should be used to setup event handlers for characteristics and update respective values.
-   */
-  configureAccessory(accessory: PlatformAccessory) {
-    this.log.info('Loading accessory from cache:', accessory.displayName);
+  connectSocket(): void {
+    this.socket = io(UPSTREAM_API);
 
-    // add the restored accessory to the accessories cache so we can track if it has already been registered
-    this.accessories.push(accessory);
+    this.socket.on('connect', () => {
+      this.reconnectAttempts = 0; // reset reconnect attempts
+      // Send the status of all devices when the connection is established
+      const bridge = (this.api.hap as any).bridge;
+      bridge.bridgedAccessories.forEach((accessory: PlatformAccessory) => {
+        accessory.services.forEach((service: Service) => {
+          service.characteristics.forEach((characteristic: Characteristic) => {
+            const message = createMessage(accessory, service, characteristic);
+            this.socket?.emit('deviceStatus', message);
+          });
+        });
+      });
+    });
+
+    this.socket.on('deviceStatus', (message: DeviceStatusMessage<CharacteristicValue | null | undefined>) => {
+      // Update the device properties when a message is received from the upstream API
+      const bridge = (this.api.hap as any).bridge;
+      const accessory = bridge.bridgedAccessories.find(
+        (accessory: PlatformAccessory) => accessory.UUID === message.id,
+      );
+      const service = accessory?.getService(message.type);
+      const characteristic = service?.getCharacteristic(message.characteristic);
+      characteristic?.updateValue(message.value!);
+    });
+
+    this.socket.on('connect_error', (error) => {
+      this.log.error('Connection error:', error);
+      this.reconnectAttempts++;
+      if (this.reconnectAttempts < 50) {
+        setTimeout(() => this.connectSocket(), 1000 * this.reconnectAttempts); // exponential backoff
+      } else {
+        this.log.error('Failed to reconnect after 50 attempts,stopping...');
+      }
+    });
+
+    this.socket.on('disconnect', () => {
+      this.log.warn('Disconnected from server, attempting to reconnect...');
+      this.reconnectAttempts = 0;
+      this.connectSocket();
+    });
   }
 
-  /**
-   * This is an example method showing how to register discovered accessories.
-   * Accessories must only be registered once, previously created accessories
-   * must not be registered again to prevent "duplicate UUID" errors.
-   */
-  discoverDevices() {
-
-    // EXAMPLE ONLY
-    // A real plugin you would discover accessories from the local network, cloud services
-    // or a user-defined array in the platform config.
-    const exampleDevices = [
-      {
-        exampleUniqueId: 'ABCD',
-        exampleDisplayName: 'Bedroom',
-      },
-      {
-        exampleUniqueId: 'EFGH',
-        exampleDisplayName: 'Kitchen',
-      },
-    ];
-
-    // loop over the discovered devices and register each one if it has not already been registered
-    for (const device of exampleDevices) {
-
-      // generate a unique id for the accessory this should be generated from
-      // something globally unique, but constant, for example, the device serial
-      // number or MAC address
-      const uuid = this.api.hap.uuid.generate(device.exampleUniqueId);
-
-      // see if an accessory with the same uuid has already been registered and restored from
-      // the cached devices we stored in the `configureAccessory` method above
-      const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid);
-
-      if (existingAccessory) {
-        // the accessory already exists
-        this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
-
-        // if you need to update the accessory.context then you should run `api.updatePlatformAccessories`. eg.:
-        // existingAccessory.context.device = device;
-        // this.api.updatePlatformAccessories([existingAccessory]);
-
-        // create the accessory handler for the restored accessory
-        // this is imported from `platformAccessory.ts`
-        new ExamplePlatformAccessory(this, existingAccessory);
-
-        // it is possible to remove platform accessories at any time using `api.unregisterPlatformAccessories`, eg.:
-        // remove platform accessories when no longer present
-        // this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [existingAccessory]);
-        // this.log.info('Removing existing accessory from cache:', existingAccessory.displayName);
-      } else {
-        // the accessory does not yet exist, so we need to create it
-        this.log.info('Adding new accessory:', device.exampleDisplayName);
-
-        // create a new accessory
-        const accessory = new this.api.platformAccessory(device.exampleDisplayName, uuid);
-
-        // store a copy of the device object in the `accessory.context`
-        // the `context` property can be used to store any data about the accessory you may need
-        accessory.context.device = device;
-
-        // create the accessory handler for the newly create accessory
-        // this is imported from `platformAccessory.ts`
-        new ExamplePlatformAccessory(this, accessory);
-
-        // link the accessory to your platform
-        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-      }
-    }
+  configureAccessory(accessory: PlatformAccessory): void {
+    // Setup event listeners for accessory changes
+    accessory.services.forEach((service: Service) => {
+      service.characteristics.forEach((characteristic: Characteristic) => {
+        characteristic.on('change', ({ oldValue, newValue }) => {
+          // Send a WebSocket message to the upstream API when the device status changes
+          if (oldValue !== newValue) {
+            const message = createMessage(accessory, service, characteristic);
+            this.socket?.emit('deviceStatus', message);
+          }
+        });
+      });
+    });
   }
 }
