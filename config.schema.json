@@ -1,15 +1,21 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "HomebridgeAI",
   "pluginType": "platform",
   "singular": true,
   "schema": {
     "type": "object",
     "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "required": true,
+        "default": "??"
+      },
       "name": {
         "title": "Name",
         "type": "string",
         "required": true,
-        "default": "Example Dynamic Platform"
+        "default": "HomebridgeAI"
       }
     }
   }
