@@ -8,10 +8,10 @@ import {
   PlatformConfig,
   Service,
 } from 'homebridge';
-import { Socket, io } from 'socket.io-client';
+import WebSocket from 'ws';
 import { UPSTREAM_API } from './settings';
 import { HAPNodeJSClient } from 'hap-node-client';
-import { promisify } from 'node:util';
+
 
 // Define the message types
 interface DeviceStatusMessage<T> {
@@ -38,7 +38,7 @@ function createMessage(
 }
 
 export class HomebridgeAI implements DynamicPlatformPlugin {
-  private socket: Socket | undefined;
+  private socket: WebSocket | undefined;
   private reconnectAttempts = 0;
   private hapClient: ReturnType<HAPNodeJSClient>;
 
@@ -50,6 +50,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     public readonly config: PlatformConfig,
     public readonly api: HomebridgeAPI,
   ) {
+
     this.log.info('AI: Preparing for launch...');
 
     // Connect to Homebridge in insecure mode
@@ -74,6 +75,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       this.hapClient.on('event', this.handleCharacteristicChange.bind(this));
     });
   }
+
 
   async fetchAllDevicesAndCharacteristics() {
 
@@ -101,55 +103,59 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   handleCharacteristicChange(data: any) {
     this.log.debug(`AI: Characteristic changed: ${JSON.stringify(data)}`);
     // Construct and send a message with the updated characteristic
-    this.socket?.emit(
-      'deviceStatus',
-      createMessage(data.accessory, data.service, data.characteristic),
+    this.socket?.send(
+      JSON.stringify({
+        event: 'deviceStatus',
+        data: createMessage(data.accessory, data.service, data.characteristic),
+      }),
     );
   }
 
-  // FIXME: i think subsequent calls to connectSocket() are triggering more callbacks or something
-  connectSocket(): void {
-    this.socket = io(UPSTREAM_API);
 
-    this.socket.on('connect', () => {
-      this.log.info('AI: Connected to upstream');
+  connectSocket(): void {
+    this.socket = new WebSocket(UPSTREAM_API, {
+      rejectUnauthorized: process.env.NODE_ENV !== 'development',
+    });
+
+    this.socket.on('open', () => {
+      this.log.info('Connected to upstream');
       this.reconnectAttempts = 0; // reset reconnect attempts
       this.socketReady = true;
     });
 
-    this.socket.on(
-      'deviceStatus',
-      async (
-        message: DeviceStatusMessage<CharacteristicValue | null | undefined>,
-      ) => {
+    this.socket.on('message', async (message) => {
+      const { event, data } = JSON.parse(message.toString());
+
+      if (event === 'deviceStatus') {
         // Update the device properties when a message is received from the upstream API
         await this.hapClient.HAPcontrol(
           '::1',
-          message.id,
-          message.type,
-          message.characteristic,
-          message.value,
+          data.id,
+          data.type,
+          data.characteristic,
+          data.value,
         );
-      },
-    );
+      }
+    });
 
-    this.socket.on('connect_error', (error) => {
-      this.log.error('Connection error:', error.name); // or the full error
+    this.socket.on('error', (error) => {
+      this.log.error('Connection error:', error);
       this.reconnectAttempts++;
       if (this.reconnectAttempts < 50) {
-        setTimeout(() => this.connectSocket(), 1000 * this.reconnectAttempts); // exponential backoff
+        // setTimeout(() => this.connectSocket(), 1000 * this.reconnectAttempts); // exponential backoff
       } else {
         this.log.error('Failed to reconnect after 50 attempts, stopping...');
       }
     });
 
-    this.socket.on('disconnect', () => {
+    this.socket.on('close', () => {
       this.socketReady = false;
       this.log.warn('Disconnected from server, attempting to reconnect...');
       this.reconnectAttempts = 0;
-      this.connectSocket();
+      // this.connectSocket();
     });
   }
+
 
   configureAccessory(_accessory: PlatformAccessory): void {
     this.log.debug(

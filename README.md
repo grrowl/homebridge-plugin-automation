@@ -8,6 +8,8 @@ Control your homebridge instance from AI.
 docker run --name=homebridge-ai -p 18581:8581 -v $(pwd)/homebridge:/homebridge -v $(pwd):/var/lib/homebridge-plugin-ai homebridge/homebridge:latest; docker rm homebridge-ai
 ```
 
+Then open homebridge UI: http://localhost:18581/
+
 ---
 
 <p align="center">
