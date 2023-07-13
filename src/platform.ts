@@ -9,14 +9,15 @@ import type {
   Service,
   HAP,
 } from "homebridge";
-import { APIEvent } from "homebridge";
 import WebSocket from "ws";
 import { UPSTREAM_API } from "./settings";
-import { HAPNodeJSClient } from "hap-node-client";
-import { DeviceStatus, Message } from "./types/clientMessage";
+import { DeviceStatus, Message, reduceService } from "./types/clientMessage";
 import { ServerMessage } from "./types/serverMessage";
+import { HapClient, HapInstance } from "@oznu/hap-client";
+import { HapMonitor } from "@oznu/hap-client/dist/monitor";
+import { debounce } from "./util/debounce";
 
-function createMessage(
+/* function createMessage(
   accessory: PlatformAccessory,
   service: Service,
   characteristic: Characteristic,
@@ -27,12 +28,14 @@ function createMessage(
     characteristic: characteristic.UUID,
     value: characteristic.value,
   };
-}
+} */
 
 export class HomebridgeAI implements DynamicPlatformPlugin {
-  private socket: WebSocket | undefined;
+  private socket: WebSocket;
   private reconnectAttempts = 0;
-  private hap: ReturnType<HAPNodeJSClient>;
+
+  private hap: HapClient;
+  private hapMonitor?: HapMonitor;
 
   private hapReady = false;
   private socketReady = false;
@@ -44,29 +47,58 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   ) {
     this.log.info("Preparing for launch...");
 
+    const pin = config.pin;
+
     // Connect to Homebridge in insecure mode
-    this.hap = new HAPNodeJSClient({
-      debug: false,
-      pin: undefined,
+    this.hap = new HapClient({
+      pin,
+      // logger: this.log,
+      logger: console,
+      config: {
+        debug: true,
+      },
     });
 
-    this.hap.on("Ready", () => {
-      this.log.info("HAP Ready");
-      this.hapReady = true;
-      this.fetchAllDevicesAndCharacteristics();
+    const eventuallyStartMonitoring = debounce(
+      this.startMonitoring.bind(this),
+      4000,
+    );
+    this.hap.on("instance-discovered", (instance: HapInstance) => {
+      this.hapReady = true; // at least one instance is discovered
+
+      // this.startMonitoring();
+      eventuallyStartMonitoring();
     });
 
-    this.api.on(APIEvent.DID_FINISH_LAUNCHING, () => {
+    // APIEvent.DID_FINISH_LAUNCHING
+    this.api.on("didFinishLaunching", () => {
       this.log.info("Launching...");
       this.connectSocket();
-      // this.fetchAllDevicesAndCharacteristics();
-      this.hap.on("event", this.handleCharacteristicChange.bind(this));
     });
-    this.api.on(APIEvent.SHUTDOWN, () => {
+    // APIEvent.SHUTDOWN
+    this.api.on("shutdown", () => {
       this.log.info("Shutting down");
-      this.connectSocket();
-      // this.fetchAllDevicesAndCharacteristics();
-      this.hap.on("event", this.handleCharacteristicChange.bind(this));
+      this.hapMonitor?.finish();
+    });
+
+    setTimeout(async () => {
+      const services = await this.hap.getAllServices();
+      this.log.warn("got", { services });
+    }, 20_000);
+  }
+
+  async startMonitoring() {
+    if (this.hapMonitor) {
+      this.log.warn(`Already monitoring, skipping ...`);
+      return;
+    }
+
+    this.log.info(`Start monitoring`);
+
+    this.hapMonitor = await this.hap.monitorCharacteristics();
+
+    this.hapMonitor.on("service-update", (responses) => {
+      this.log.info("monitor service-update", responses);
     });
   }
 
@@ -80,17 +112,14 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       return;
     }
 
-    this.hap.HAPaccessories((response) => {
-      this.log.info("BOOT Got accessories", typeof response, response?.length);
-      this.log.debug(response);
-      this.log.debug(response?.[0]?.accessories?.accessories);
+    // this.hap.HAPaccessories((response) => {
+    const services = await this.hap.getAllServices();
 
-      this.sendMessage({
-        type: "deviceList",
-        data: response.map((data) =>
-          createMessage(data.accessory, data.service, data.characteristic),
-        ),
-      });
+    this.log.debug("services", services);
+
+    this.sendMessage({
+      type: "deviceList",
+      data: services.map((service) => reduceService(service)),
     });
 
     // const getAccessories = promisify(this.hapClient.HAPaccessories.bind(this.hapClient));
@@ -111,14 +140,6 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     // });
   }
 
-  handleCharacteristicChange(data: any) {
-    this.log.debug(`Characteristic changed: ${JSON.stringify(data)}`);
-    this.sendMessage({
-      type: "deviceStatusChange",
-      data: createMessage(data.accessory, data.service, data.characteristic),
-    });
-  }
-
   connectSocket(): void {
     this.socket = new WebSocket(UPSTREAM_API, {
       rejectUnauthorized: process.env.NODE_ENV !== "development",
@@ -128,7 +149,6 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       this.log.info("Server connection ready");
       this.reconnectAttempts = 0; // reset reconnect attempts
       this.socketReady = true;
-      this.fetchAllDevicesAndCharacteristics();
     });
 
     this.socket.on("message", async (message) => {
@@ -136,13 +156,14 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
       if (event === "deviceStatus") {
         // Update the device properties when a message is received from the upstream API
-        await this.hap.HAPcontrol(
-          "::1",
-          data.id,
-          data.type,
-          data.characteristic,
-          data.value,
-        );
+        // FIXME: server should control devices
+        // await this.hap.HAPcontrol(
+        //   "::1",
+        //   data.id,
+        //   data.type,
+        //   data.characteristic,
+        //   data.value,
+        // );
       }
     });
 
@@ -160,17 +181,17 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       this.socketReady = false;
       this.log.warn("Disconnected from server, attempting to reconnect...");
       this.reconnectAttempts = 0;
-      // this.connectSocket();
+      this.connectSocket();
     });
   }
 
-  sendMessage(message: Omit<Message, "version">): void {
-    this.socket?.send(
-      JSON.stringify({
-        version: 1,
-        ...message,
-      }),
-    );
+  sendMessage(message: Omit<Message, "version" | "apiKey">): void {
+    const versionedMessage = {
+      version: 1,
+      apiKey: this.config.apiKey,
+      ...message,
+    };
+    this.socket.send(JSON.stringify(versionedMessage));
   }
 
   handleMessage(_message: ServerMessage): void {

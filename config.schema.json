@@ -11,6 +11,12 @@
         "required": true,
         "default": "??"
       },
+      "pin": {
+        "title": "Homebridge PIN",
+        "type": "string",
+        "required": true,
+        "default": "000-00-000"
+      },
       "name": {
         "title": "Name",
         "type": "string",

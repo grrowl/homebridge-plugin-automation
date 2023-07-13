@@ -1,5 +1,8 @@
+import { ServiceType } from "@oznu/hap-client";
+
 interface VersionedMessage {
   version: 1;
+  apiKey: string;
 }
 
 export interface DeviceStatus<T> {
@@ -11,7 +14,7 @@ export interface DeviceStatus<T> {
 
 export interface DeviceList extends VersionedMessage {
   type: "deviceList";
-  data: DeviceStatus<any>[];
+  data: any; //DeviceStatus<any>[];
 }
 
 export interface DeviceStatusChange extends VersionedMessage {
@@ -20,3 +23,15 @@ export interface DeviceStatusChange extends VersionedMessage {
 }
 
 export type Message = DeviceList | DeviceStatusChange;
+
+// functions to reduce full objects to simpler representations over the wire
+
+export const reduceService = (service: ServiceType) => ({
+  name: service.serviceName,
+  uuid: service.uuid,
+  type: service.type,
+  characteristics: service.serviceCharacteristics.map((characteristic) => ({
+    uuid: characteristic.uuid,
+    type: characteristic.type,
+  })),
+});
