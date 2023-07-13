@@ -1,8 +1,10 @@
 {
-    "debugMode": true,
-    "keepOrphans": false,
-    "insecureMode": true,
-    "env": {
-        "DEBUG": "socket.io:client*,homebridge-plugin-ai"
-    }
+  "debugMode": true,
+  "keepOrphans": false,
+  "insecureMode": true,
+  "env": {
+    "DEBUG": "homebridge-plugin-ai",
+    "NODE_ENV": "development",
+    "AI_UPSTREAM_API": "wss://host.containers.internal:3000"
+  }
 }
