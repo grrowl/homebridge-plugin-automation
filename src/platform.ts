@@ -11,24 +11,11 @@ import type {
 } from "homebridge";
 import WebSocket from "ws";
 import { UPSTREAM_API } from "./settings";
-import { DeviceStatus, Message, reduceService } from "./types/clientMessage";
+import { Message } from "./types/clientMessage";
 import { ServerMessage } from "./types/serverMessage";
 import { HapClient, HapInstance } from "@oznu/hap-client";
 import { HapMonitor } from "@oznu/hap-client/dist/monitor";
 import { debounce } from "./util/debounce";
-
-/* function createMessage(
-  accessory: PlatformAccessory,
-  service: Service,
-  characteristic: Characteristic,
-): DeviceStatus<any> {
-  return {
-    id: accessory.UUID,
-    type: service.UUID,
-    characteristic: characteristic.UUID,
-    value: characteristic.value,
-  };
-} */
 
 export class HomebridgeAI implements DynamicPlatformPlugin {
   private socket: WebSocket;
@@ -82,8 +69,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     });
 
     setTimeout(async () => {
-      const services = await this.hap.getAllServices();
-      this.log.warn("got", { services });
+      this.sendStateUpdate();
     }, 20_000);
   }
 
@@ -95,10 +81,29 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
     this.log.info(`Start monitoring`);
 
+    // TODO: this calls getAllServices under the hood -- we also need services,, so we can optimise and new HapMonitor directly like before
     this.hapMonitor = await this.hap.monitorCharacteristics();
 
     this.hapMonitor.on("service-update", (responses) => {
       this.log.info("monitor service-update", responses);
+
+      responses.forEach((response) => {
+        this.sendMessage({
+          type: "deviceStatusChange",
+          data: response,
+        });
+      });
+    });
+  }
+
+  async sendStateUpdate() {
+    const services = await this.hap.getAllServices();
+
+    // TODO: maybe call startMonitoring here?
+
+    this.sendMessage({
+      type: "deviceList",
+      data: services,
     });
   }
 
@@ -116,11 +121,6 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     const services = await this.hap.getAllServices();
 
     this.log.debug("services", services);
-
-    this.sendMessage({
-      type: "deviceList",
-      data: services.map((service) => reduceService(service)),
-    });
 
     // const getAccessories = promisify(this.hapClient.HAPaccessories.bind(this.hapClient));
     // const result = await getAccessories();
