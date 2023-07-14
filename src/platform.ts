@@ -1,21 +1,19 @@
+import { HapClient, HapInstance } from "@oznu/hap-client";
+import { HapMonitor } from "@oznu/hap-client/dist/monitor";
 import type {
-  Characteristic,
-  CharacteristicValue,
   DynamicPlatformPlugin,
   API as HomebridgeAPI,
   Logger,
   PlatformAccessory,
   PlatformConfig,
-  Service,
-  HAP,
 } from "homebridge";
 import WebSocket from "ws";
 import { UPSTREAM_API } from "./settings";
-import { Message } from "./types/clientMessage";
+import { ClientMessage } from "./types/clientMessage";
 import { ServerMessage } from "./types/serverMessage";
-import { HapClient, HapInstance } from "@oznu/hap-client";
-import { HapMonitor } from "@oznu/hap-client/dist/monitor";
 import { debounce } from "./util/debounce";
+
+const START_MONITORING_DELAY = 4000;
 
 export class HomebridgeAI implements DynamicPlatformPlugin {
   private socket: WebSocket;
@@ -48,12 +46,11 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
     const eventuallyStartMonitoring = debounce(
       this.startMonitoring.bind(this),
-      4000,
+      START_MONITORING_DELAY,
     );
-    this.hap.on("instance-discovered", (instance: HapInstance) => {
+    this.hap.on("instance-discovered", (_instance: HapInstance) => {
       this.hapReady = true; // at least one instance is discovered
 
-      // this.startMonitoring();
       eventuallyStartMonitoring();
     });
 
@@ -85,7 +82,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     this.hapMonitor = await this.hap.monitorCharacteristics();
 
     this.hapMonitor.on("service-update", (responses) => {
-      this.log.info("monitor service-update", responses);
+      this.log.debug("monitor service-update", responses);
 
       responses.forEach((response) => {
         this.sendMessage({
@@ -185,7 +182,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     });
   }
 
-  sendMessage(message: Omit<Message, "version" | "apiKey">): void {
+  sendMessage(message: Omit<ClientMessage, "version" | "apiKey">): void {
     const versionedMessage = {
       version: 1,
       apiKey: this.config.apiKey,

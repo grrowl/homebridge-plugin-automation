@@ -15,4 +15,4 @@ export interface DeviceStatusChange extends VersionedMessage {
   data: ServiceType;
 }
 
-export type Message = DeviceList | DeviceStatusChange;
+export type ClientMessage = DeviceList | DeviceStatusChange;
