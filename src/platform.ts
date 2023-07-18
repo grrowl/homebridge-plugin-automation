@@ -32,7 +32,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   ) {
     this.log.info("Preparing for launch...");
 
-    const pin = config.pin;
+    const pin = config.pin; // FIXME: [CD-32]
 
     // Connect to Homebridge in insecure mode
     this.hap = new HapClient({
@@ -177,8 +177,10 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     this.socket.on("close", () => {
       this.socketReady = false;
       this.log.warn("Disconnected from server, attempting to reconnect...");
-      this.reconnectAttempts = 0;
-      this.connectSocket();
+      // this.reconnectAttempts = 0;
+      this.reconnectAttempts++;
+      setTimeout(() => this.connectSocket(), 1000 * this.reconnectAttempts); // exponential backoff
+      // this.connectSocket();
     });
   }
 
