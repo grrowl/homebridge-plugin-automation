@@ -20,6 +20,7 @@
   "scripts": {
     "lint": "eslint src/**.ts --max-warnings=0",
     "watch": "npm run build && npm link && nodemon",
+    "dev": "NODE_ENV=development npm run watch",
     "build": "rimraf ./dist && tsc",
     "prepublishOnly": "npm run lint && npm run build"
   },
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@types/node": "^16.10.9",
+    "@types/ws": "^8.5.4",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
     "@typescript-eslint/parser": "^5.0.0",
     "eslint": "^8.0.1",

@@ -1,4 +1,4 @@
-import { HapClient, HapInstance } from "@oznu/hap-client";
+import { HapClient, HapInstance, ServiceType } from "@oznu/hap-client";
 import { HapMonitor } from "@oznu/hap-client/dist/monitor";
 import type {
   DynamicPlatformPlugin,
@@ -16,7 +16,7 @@ import { debounce } from "./util/debounce";
 const START_MONITORING_DELAY = 4000;
 
 export class HomebridgeAI implements DynamicPlatformPlugin {
-  private socket: WebSocket;
+  private socket?: WebSocket;
   private reconnectAttempts = 0;
 
   private hap: HapClient;
@@ -24,6 +24,8 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
   private hapReady = false;
   private socketReady = false;
+
+  private servicesCache: ServiceType[] = [];
 
   constructor(
     public readonly log: Logger,
@@ -84,6 +86,9 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     this.hapMonitor.on("service-update", (responses) => {
       this.log.debug("monitor service-update", responses);
 
+      // TODO: update this.servicesCache i think?
+      // although this will only be characteristic updates, not service existence
+
       responses.forEach((response) => {
         this.sendMessage({
           type: "deviceStatusChange",
@@ -102,6 +107,8 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       type: "deviceList",
       data: services,
     });
+
+    this.servicesCache = services;
   }
 
   async fetchAllDevicesAndCharacteristics() {
@@ -149,18 +156,14 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     });
 
     this.socket.on("message", async (message) => {
-      const { event, data } = JSON.parse(message.toString());
+      const parsed = JSON.parse(message.toString());
 
-      if (event === "deviceStatus") {
-        // Update the device properties when a message is received from the upstream API
-        // FIXME: server should control devices
-        // await this.hap.HAPcontrol(
-        //   "::1",
-        //   data.id,
-        //   data.type,
-        //   data.characteristic,
-        //   data.value,
-        // );
+      if (Array.isArray(parsed)) {
+        for (const msg of parsed) {
+          this.handleMessage(msg);
+        }
+      } else {
+        this.handleMessage(parsed);
       }
     });
 
@@ -190,10 +193,44 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       apiKey: this.config.apiKey,
       ...message,
     };
-    this.socket.send(JSON.stringify(versionedMessage));
+    this.socket?.send(JSON.stringify(versionedMessage));
   }
 
-  handleMessage(_message: ServerMessage): void {
+  handleMessage({ type, data }: ServerMessage) {
+    switch (type) {
+      case "SetCharacteristic": {
+        const service = this.servicesCache.find(
+          (service) => service.uniqueId === data.serviceId,
+        );
+        if (!service) {
+          this.log.error(`Service ${data.serviceId} not found`);
+          return false;
+        }
+
+        this.hap.setCharacteristic(service, data.iid, data.value);
+
+        break;
+      }
+      case "Future":
+        break;
+
+      default:
+      // TODO: upgrade typescript
+      // return data satisfies never;
+    }
+
+    // if (event === "deviceStatus") {
+    // Update the device properties when a message is received from the upstream API
+    // FIXME: server should control devices
+    // await this.hap.HAPcontrol(
+    //   "::1",
+    //   data.id,
+    //   data.type,
+    //   data.characteristic,
+    //   data.value,
+    // );
+    // }
+
     return;
   }
 
