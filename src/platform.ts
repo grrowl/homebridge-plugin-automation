@@ -12,8 +12,12 @@ import { UPSTREAM_API } from "./settings";
 import { debounce } from "./util/debounce";
 import { ClientMessage, ClientService } from "./schemas/ClientMessage";
 import { ServerMessage } from "./schemas/ServerMessage";
+import { findConfigPin } from "./util/findConfigPin";
 
-const START_MONITORING_DELAY = 4000;
+// how long after the last instance was discovered to start monitoring
+const START_MONITORING_DELAY = 4_000;
+// send a full state update to the server (assuming all instances have been discovered)
+const SEND_STATE_DELAY = 20_000;
 
 export class HomebridgeAI implements DynamicPlatformPlugin {
   private socket?: WebSocket;
@@ -34,7 +38,13 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   ) {
     this.log.info("Preparing for launch...");
 
-    const pin = config.pin; // FIXME: [CD-32]
+    const pin = config.pin || findConfigPin();
+
+    if (!pin) {
+      this.log.error(
+        "Homebridge-AI requires a PIN to be configured in the config.json",
+      );
+    }
 
     // Connect to Homebridge in insecure mode
     this.hap = new HapClient({
@@ -69,7 +79,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
     setTimeout(async () => {
       this.sendStateUpdate();
-    }, 20_000);
+    }, SEND_STATE_DELAY);
   }
 
   connectSocket(): void {
@@ -124,10 +134,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     this.hapMonitor = await this.hap.monitorCharacteristics();
 
     this.hapMonitor.on("service-update", (responses) => {
-      // this.log.debug("monitor service-update", responses);
-
-      // TODO: update this.servicesCache i think?
-      // although this will only be characteristic updates, not service existence
+      // no need to update this.servicesCache as this is only characteristic updates. servicesCache will be out of date for characteristic state.
 
       responses.forEach((response) => {
         this.sendMessage({
@@ -144,7 +151,11 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
     const services = await this.hap.getAllServices();
 
-    // TODO: maybe call startMonitoring here?
+    if (services.length === 0) {
+      this.log.warn("No services discovered, perhaps PIN incorrect?");
+    }
+
+    // FIXME: this doubles up with HapMonitor's service discovery
 
     this.sendMessage({
       type: "deviceList",
