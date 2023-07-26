@@ -7,11 +7,12 @@ import type {
   PlatformAccessory,
   PlatformConfig,
 } from "homebridge";
+import qs from "node:querystring";
 import WebSocket from "ws";
-import { UPSTREAM_API } from "./settings";
-import { debounce } from "./util/debounce";
 import { ClientMessage, ClientService } from "./schemas/ClientMessage";
 import { ServerMessage } from "./schemas/ServerMessage";
+import { UPSTREAM_API } from "./settings";
+import { debounce } from "./util/debounce";
 import { findConfigPin } from "./util/findConfigPin";
 
 // how long after the last instance was discovered to start monitoring
@@ -83,7 +84,9 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   }
 
   connectSocket(): void {
-    this.socket = new WebSocket(UPSTREAM_API, {
+    const wsQuery = qs.stringify({ apiKey: this.config.apiKey });
+    const wsAddress = new URL(`${UPSTREAM_API}?${wsQuery}`);
+    this.socket = new WebSocket(wsAddress, {
       rejectUnauthorized: process.env.NODE_ENV !== "development", // allow self-signed certs in dev
     });
 
@@ -134,7 +137,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     this.hapMonitor = await this.hap.monitorCharacteristics();
 
     this.hapMonitor.on("service-update", (responses) => {
-      // no need to update this.servicesCache as this is only characteristic updates. servicesCache will be out of date for characteristic state.
+      // no need to update this.servicesCache as this is only characteristic updates -- cache will be out of date for characteristic state.
 
       responses.forEach((response) => {
         this.sendMessage({
@@ -168,7 +171,6 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   sendMessage(message: Omit<ClientMessage, "version" | "apiKey">): void {
     const versionedMessage = {
       version: 1,
-      apiKey: this.config.apiKey,
       ...message,
     };
     const json = JSON.stringify(versionedMessage);

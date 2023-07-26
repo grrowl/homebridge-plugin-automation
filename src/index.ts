@@ -1,7 +1,7 @@
-import { API } from 'homebridge';
+import { API } from "homebridge";
 
-import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
-import { HomebridgeAI } from './platform';
+import { HomebridgeAI } from "./platform";
+import { PLATFORM_NAME } from "./settings";
 
 /**
  * This method registers the platform with Homebridge
