@@ -38,7 +38,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   ) {
     this.log.info("Preparing for launch...");
 
-    const pin = config.pin || findConfigPin();
+    const pin = config.pin || findConfigPin(this.api);
 
     if (!pin) {
       this.log.error(

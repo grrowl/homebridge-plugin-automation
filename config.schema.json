@@ -14,7 +14,7 @@
       "pin": {
         "title": "Homebridge PIN",
         "type": "string",
-        "required": true,
+        "required": false,
         "default": "000-00-000"
       },
       "name": {
