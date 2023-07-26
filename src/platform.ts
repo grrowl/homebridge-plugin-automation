@@ -9,9 +9,9 @@ import type {
 } from "homebridge";
 import WebSocket from "ws";
 import { UPSTREAM_API } from "./settings";
-import { ClientMessage } from "./types/clientMessage";
-import { ServerMessage } from "./types/serverMessage";
 import { debounce } from "./util/debounce";
+import { ClientMessage, ClientService } from "./schemas/ClientMessage";
+import { ServerMessage } from "./schemas/ServerMessage";
 
 const START_MONITORING_DELAY = 4000;
 
@@ -72,81 +72,9 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     }, 20_000);
   }
 
-  async startMonitoring() {
-    if (this.hapMonitor) {
-      this.log.warn(`Already monitoring, skipping ...`);
-      return;
-    }
-
-    this.log.info(`Start monitoring`);
-
-    // TODO: this calls getAllServices under the hood -- we also need services,, so we can optimise and new HapMonitor directly like before
-    this.hapMonitor = await this.hap.monitorCharacteristics();
-
-    this.hapMonitor.on("service-update", (responses) => {
-      this.log.debug("monitor service-update", responses);
-
-      // TODO: update this.servicesCache i think?
-      // although this will only be characteristic updates, not service existence
-
-      responses.forEach((response) => {
-        this.sendMessage({
-          type: "deviceStatusChange",
-          data: response,
-        });
-      });
-    });
-  }
-
-  async sendStateUpdate() {
-    const services = await this.hap.getAllServices();
-
-    // TODO: maybe call startMonitoring here?
-
-    this.sendMessage({
-      type: "deviceList",
-      data: services,
-    });
-
-    this.servicesCache = services;
-  }
-
-  async fetchAllDevicesAndCharacteristics() {
-    if (!this.hapReady || !this.socketReady) {
-      this.log.warn(
-        "Connections not yet ready",
-        this.hapReady,
-        this.socketReady,
-      );
-      return;
-    }
-
-    // this.hap.HAPaccessories((response) => {
-    const services = await this.hap.getAllServices();
-
-    this.log.debug("services", services);
-
-    // const getAccessories = promisify(this.hapClient.HAPaccessories.bind(this.hapClient));
-    // const result = await getAccessories();
-    // console.log({ result });
-    // this.hapClient.HAPaccessories((err: unknown, response: any[]) => {
-    //   this.log.info('Got accessories', response);
-    //   for (const device of response) {
-    //     for (const service of device.services) {
-    //       for (const characteristic of service.characteristics) {
-    //         this.socket?.emit(
-    //           'deviceStatus',
-    //           createMessage(device, service, characteristic),
-    //         );
-    //       }
-    //     }
-    //   }
-    // });
-  }
-
   connectSocket(): void {
     this.socket = new WebSocket(UPSTREAM_API, {
-      rejectUnauthorized: process.env.NODE_ENV !== "development",
+      rejectUnauthorized: process.env.NODE_ENV !== "development", // allow self-signed certs in dev
     });
 
     this.socket.on("open", () => {
@@ -169,22 +97,57 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
     this.socket.on("error", (error) => {
       this.log.error("Connection error:", error);
-      this.reconnectAttempts++;
-      if (this.reconnectAttempts < 50) {
-        // setTimeout(() => this.connectSocket(), 1000 * this.reconnectAttempts); // exponential backoff
-      } else {
-        this.log.error("Failed to reconnect after 50 attempts, stopping...");
-      }
+      // 'close' will also be called
     });
 
     this.socket.on("close", () => {
       this.socketReady = false;
       this.log.warn("Disconnected from server, attempting to reconnect...");
-      // this.reconnectAttempts = 0;
       this.reconnectAttempts++;
-      setTimeout(() => this.connectSocket(), 1000 * this.reconnectAttempts); // exponential backoff
-      // this.connectSocket();
+      setTimeout(
+        () => this.connectSocket(),
+        1000 * Math.pow(2, this.reconnectAttempts),
+      ); // exponential backoff
     });
+  }
+
+  async startMonitoring() {
+    if (this.hapMonitor) {
+      this.log.warn(`Already monitoring, skipping ...`);
+      return;
+    }
+
+    this.log.info(`Start monitoring for updates`);
+
+    // TODO: this calls getAllServices under the hood -- we also need services,, so we can optimise and new HapMonitor directly like before
+    this.hapMonitor = await this.hap.monitorCharacteristics();
+
+    this.hapMonitor.on("service-update", (responses) => {
+      // this.log.debug("monitor service-update", responses);
+
+      // TODO: update this.servicesCache i think?
+      // although this will only be characteristic updates, not service existence
+
+      responses.forEach((response) => {
+        this.sendMessage({
+          type: "deviceStatusChange",
+          data: response,
+        });
+      });
+    });
+  }
+
+  async sendStateUpdate() {
+    const services = await this.hap.getAllServices();
+
+    // TODO: maybe call startMonitoring here?
+
+    this.sendMessage({
+      type: "deviceList",
+      data: services.map((service) => ClientService.parse(service)),
+    });
+
+    this.servicesCache = services;
   }
 
   sendMessage(message: Omit<ClientMessage, "version" | "apiKey">): void {
@@ -197,6 +160,8 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   }
 
   handleMessage({ type, data }: ServerMessage) {
+    this.log.debug(`Server message ${type} ${JSON.stringify(data)}`);
+
     switch (type) {
       case "SetCharacteristic": {
         const service = this.servicesCache.find(
@@ -207,31 +172,33 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
           return false;
         }
 
-        this.hap.setCharacteristic(service, data.iid, data.value);
+        const infoCharacteristic = service.serviceCharacteristics.find(
+          (c) => c.iid === data.iid,
+        );
+        this.log.info(
+          `Setting ${service.serviceName}: ${infoCharacteristic?.type}/${data.iid} to ${data.value}`,
+        );
+        this.handleMessageAction(
+          this.hap.setCharacteristic(service, data.iid, data.value),
+        );
 
         break;
       }
-      case "Future":
-        break;
 
       default:
-      // TODO: upgrade typescript
-      // return data satisfies never;
+        return type satisfies never;
     }
 
-    // if (event === "deviceStatus") {
-    // Update the device properties when a message is received from the upstream API
-    // FIXME: server should control devices
-    // await this.hap.HAPcontrol(
-    //   "::1",
-    //   data.id,
-    //   data.type,
-    //   data.characteristic,
-    //   data.value,
-    // );
-    // }
-
     return;
+  }
+
+  // generic async handler for ServerMessages
+  handleMessageAction<T>(promise: Promise<T>) {
+    promise
+      .then((value) => this.log.debug("ServerMessage processed", value))
+      .catch((error) =>
+        this.log.error("ServerMessage error processing", error),
+      );
   }
 
   configureAccessory(_accessory: PlatformAccessory): void {
