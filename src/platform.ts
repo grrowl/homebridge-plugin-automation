@@ -18,12 +18,12 @@ const START_MONITORING_DELAY = 4000;
 export class HomebridgeAI implements DynamicPlatformPlugin {
   private socket?: WebSocket;
   private reconnectAttempts = 0;
+  private messageBuffer: string[] = [];
+  private socketReady = false;
 
   private hap: HapClient;
   private hapMonitor?: HapMonitor;
-
   private hapReady = false;
-  private socketReady = false;
 
   private servicesCache: ServiceType[] = [];
 
@@ -81,6 +81,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       this.log.info("Server connection ready");
       this.reconnectAttempts = 0; // reset reconnect attempts
       this.socketReady = true;
+      this.flushMessageBuffer();
     });
 
     this.socket.on("message", async (message) => {
@@ -138,6 +139,9 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   }
 
   async sendStateUpdate() {
+    // we're sending a full state update, so past updates are irrelevant
+    this.clearMessageBuffer();
+
     const services = await this.hap.getAllServices();
 
     // TODO: maybe call startMonitoring here?
@@ -156,7 +160,26 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       apiKey: this.config.apiKey,
       ...message,
     };
-    this.socket?.send(JSON.stringify(versionedMessage));
+    const json = JSON.stringify(versionedMessage);
+    if (this.socketReady) {
+      this.socket?.send(json);
+    } else {
+      this.messageBuffer.push(json);
+    }
+  }
+
+  flushMessageBuffer(): void {
+    while (this.messageBuffer.length > 0) {
+      const message = this.messageBuffer.shift();
+      if (message) {
+        this.socket?.send(message);
+      }
+    }
+  }
+
+  // Clear the message buffer
+  clearMessageBuffer(): void {
+    this.messageBuffer = [];
   }
 
   handleMessage({ type, data }: ServerMessage) {
