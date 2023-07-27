@@ -40,10 +40,16 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     this.log.info("Preparing for launch...");
 
     const pin = config.pin || findConfigPin(this.api);
-
     if (!pin) {
       this.log.error(
         "Homebridge-AI requires a PIN to be configured in the config.json",
+      );
+    }
+
+    const apiKey = config.apiKey;
+    if (!apiKey) {
+      this.log.error(
+        "Homebridge-AI requires an API Key to be configured in the config.json",
       );
     }
 
@@ -86,6 +92,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   connectSocket(): void {
     const wsQuery = qs.stringify({ apiKey: this.config.apiKey });
     const wsAddress = new URL(`${UPSTREAM_API}?${wsQuery}`);
+    this.log.debug(`Connecting to ${wsAddress}`);
     this.socket = new WebSocket(wsAddress, {
       rejectUnauthorized: process.env.NODE_ENV !== "development", // allow self-signed certs in dev
     });
