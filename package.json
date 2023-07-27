@@ -1,7 +1,7 @@
 {
   "displayName": "HomebridgeAI",
   "name": "homebridge-ai",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Bring AI control to your home",
   "license": "Apache-2.0",
   "repository": {
