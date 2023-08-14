@@ -9,17 +9,19 @@ import type {
 } from "homebridge";
 import qs from "node:querystring";
 import WebSocket from "ws";
-import { ServerMessage } from "./schemas/ServerMessage";
+import { ServerMessage, ServerMessageSchema } from "./schemas/ServerMessage";
 import { UPSTREAM_API } from "./settings";
 import { debounce } from "./util/debounce";
 import { findConfigPin } from "./util/findConfigPin";
 import { ServiceSchema } from "./schemas/Service";
-import { ClientMessage } from "./schemas/ClientMessage";
+import { ClientMessage, MetricsData } from "./schemas/ClientMessage";
 
 // how long after the last instance was discovered to start monitoring
 const START_MONITORING_DELAY = 4_000;
 // send a full state update to the server (assuming all instances have been discovered)
 const SEND_STATE_DELAY = 20_000;
+// don't flood metrics
+const METRIC_DEBOUNCE = 1_500;
 
 export class HomebridgeAI implements DynamicPlatformPlugin {
   private socket?: WebSocket;
@@ -32,6 +34,8 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   private hapReady = false;
 
   private servicesCache: ServiceType[] = [];
+
+  private metrics: MetricsData = {};
 
   constructor(
     public readonly log: Logger,
@@ -101,24 +105,44 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     this.socket.on("open", () => {
       this.log.info("Server connection ready");
       this.reconnectAttempts = 0; // reset reconnect attempts
+      this.incrementMetric("connectionCount");
       this.socketReady = true;
       this.flushMessageBuffer();
     });
 
     this.socket.on("message", async (message) => {
-      const parsed = JSON.parse(message.toString());
-
-      if (Array.isArray(parsed)) {
-        for (const msg of parsed) {
-          this.handleMessage(msg);
+      let parsed: unknown[];
+      try {
+        parsed = JSON.parse(message.toString());
+        if (!Array.isArray(parsed)) {
+          parsed = [parsed];
         }
-      } else {
-        this.handleMessage(parsed);
+      } catch (error) {
+        this.log.warn(`ServerMessage not parseable`);
+        this.incrementMetric("invalidServerMessages");
+        return;
+      }
+
+      for (const raw of parsed) {
+        const messageParse = ServerMessageSchema.safeParse(raw);
+        if (!messageParse.success) {
+          this.log.error(
+            `Invalid ServerMessage -- please update homebridge-ai to the latest version`,
+            // messageParse.error,
+          );
+          this.log.warn(
+            `-> https://homebridgeai.com/help/invalid-servermessage`,
+          );
+          this.incrementMetric("invalidServerMessages");
+          return;
+        }
+        this.handleMessage(messageParse.data);
       }
     });
 
     this.socket.on("error", (error) => {
       this.log.error("Connection error:", error);
+      this.incrementMetric("connectionErrors");
       // 'close' will also be called
     });
 
@@ -126,6 +150,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       this.socketReady = false;
       this.log.warn("Disconnected from server, attempting to reconnect...");
       this.reconnectAttempts++;
+      this.incrementMetric("reconnectAttempts");
       setTimeout(
         () => this.connectSocket(),
         1000 * Math.pow(2, this.reconnectAttempts),
@@ -169,7 +194,20 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
     this.sendMessage({
       type: "deviceList",
-      data: services.map((service) => ServiceSchema.parse(service)),
+      data: services
+        .map((service) => {
+          const serviceParse = ServiceSchema.safeParse(service);
+          if (!serviceParse.success) {
+            this.log.warn(
+              `Unparseable service "${service.serviceName}"`,
+              serviceParse.error,
+            );
+            this.incrementMetric("invalidServices");
+            return null;
+          }
+          return serviceParse.data;
+        })
+        .filter((s): s is Exclude<typeof s, null> => s !== null),
     });
 
     this.servicesCache = services;
@@ -185,6 +223,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       this.socket?.send(json);
     } else {
       this.messageBuffer.push(json);
+      this.incrementMetric("bufferedMessages");
     }
   }
 
@@ -239,13 +278,37 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     return;
   }
 
-  // generic async handler for ServerMessages
+  // generic async handler for ServerMessages (since handleMessage must be sync)
   handleMessageAction<T>(promise: Promise<T>) {
     promise
       .then((value) => this.log.debug("ServerMessage processed", value))
       .catch((error) =>
         this.log.error("ServerMessage error processing", error),
       );
+  }
+
+  incrementMetric(metric: keyof MetricsData) {
+    this.metrics[metric] = (this.metrics[metric] || 0) + 1;
+    this.sendMetrics();
+  }
+
+  private debounceTimeout?: NodeJS.Timeout;
+  sendMetrics(): void {
+    if (this.debounceTimeout) {
+      clearTimeout(this.debounceTimeout);
+    }
+
+    this.debounceTimeout = setTimeout(() => {
+      if (!this.socketReady) {
+        // never buffer these
+        return;
+      }
+
+      this.sendMessage({
+        type: "metricsChange",
+        data: this.metrics,
+      });
+    }, METRIC_DEBOUNCE);
   }
 
   configureAccessory(_accessory: PlatformAccessory): void {

@@ -15,9 +15,25 @@ export const DeviceStatusChangeSchema = VersionedMessageSchema.extend({
   data: ServiceSchema,
 });
 
+export const MetricsChangeSchema = VersionedMessageSchema.extend({
+  type: z.literal("metricsChange"),
+  data: z
+    .object({
+      invalidServices: z.number(),
+      invalidServerMessages: z.number(),
+      connectionCount: z.number(),
+      connectionErrors: z.number(),
+      reconnectAttempts: z.number(),
+      bufferedMessages: z.number(),
+    })
+    .partial(),
+});
+export type MetricsData = z.infer<typeof MetricsChangeSchema>["data"];
+
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   DeviceListSchema,
   DeviceStatusChangeSchema,
+  MetricsChangeSchema,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
