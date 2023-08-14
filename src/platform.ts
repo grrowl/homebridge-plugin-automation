@@ -9,11 +9,12 @@ import type {
 } from "homebridge";
 import qs from "node:querystring";
 import WebSocket from "ws";
-import { ClientMessage, ClientService } from "./schemas/ClientMessage";
 import { ServerMessage } from "./schemas/ServerMessage";
 import { UPSTREAM_API } from "./settings";
 import { debounce } from "./util/debounce";
 import { findConfigPin } from "./util/findConfigPin";
+import { ServiceSchema } from "./schemas/Service";
+import { ClientMessage } from "./schemas/ClientMessage";
 
 // how long after the last instance was discovered to start monitoring
 const START_MONITORING_DELAY = 4_000;
@@ -142,7 +143,6 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
     // TODO: this calls getAllServices under the hood -- we also need services,, so we can optimise and new HapMonitor directly like before
     this.hapMonitor = await this.hap.monitorCharacteristics();
-
     this.hapMonitor.on("service-update", (responses) => {
       // no need to update this.servicesCache as this is only characteristic updates -- cache will be out of date for characteristic state.
 
@@ -169,7 +169,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
     this.sendMessage({
       type: "deviceList",
-      data: services.map((service) => ClientService.parse(service)),
+      data: services.map((service) => ServiceSchema.parse(service)),
     });
 
     this.servicesCache = services;
@@ -206,6 +206,10 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     this.log.debug(`Server message ${type} ${JSON.stringify(data)}`);
 
     switch (type) {
+      case "Notify":
+        this.log.info(`Server notification: ${JSON.stringify(data)}`);
+        break;
+
       case "SetCharacteristic": {
         const service = this.servicesCache.find(
           (service) => service.uniqueId === data.serviceId,

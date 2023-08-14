@@ -1,16 +1,9 @@
 import { z } from "zod";
 
 const VersionedMessageSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(1).default(1),
 });
 
-/*
-setCharacteristic(
-  service: ServiceType,
-  iid: number,
-  value: number | string | boolean
-)
-*/
 export const SetCharacteristicSchema = VersionedMessageSchema.extend({
   type: z.literal("SetCharacteristic"),
   data: z.object({
@@ -20,6 +13,14 @@ export const SetCharacteristicSchema = VersionedMessageSchema.extend({
   }),
 });
 
-export const ServerMessage = SetCharacteristicSchema;
+export const NotifySchema = VersionedMessageSchema.extend({
+  type: z.literal("Notify"),
+  data: z.unknown(),
+});
 
-export type ServerMessage = z.infer<typeof ServerMessage>;
+export const ServerMessageSchema = z.discriminatedUnion("type", [
+  SetCharacteristicSchema,
+  NotifySchema,
+]);
+
+export type ServerMessage = z.infer<typeof ServerMessageSchema>;

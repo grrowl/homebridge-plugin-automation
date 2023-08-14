@@ -1,23 +1,5 @@
 import { z } from "zod";
-
-/* ClientCharacteristic and ClientService are purposefully loose so we don't explode the client */
-
-const ClientCharacteristic = z
-  .object({
-    iid: z.number(),
-    value: z.optional(z.union([z.number(), z.string(), z.boolean(), z.null()])),
-    serviceType: z.string(),
-    serviceName: z.string(),
-    type: z.string(),
-  })
-  .passthrough(); // allow extra keys
-
-export const ClientService = z
-  .object({
-    uniqueId: z.optional(z.string()),
-    serviceCharacteristics: z.array(ClientCharacteristic),
-  })
-  .passthrough(); // allow extra keys
+import { ServiceSchema } from "./Service";
 
 const VersionedMessageSchema = z.object({
   version: z.literal(1),
@@ -25,17 +7,17 @@ const VersionedMessageSchema = z.object({
 
 export const DeviceListSchema = VersionedMessageSchema.extend({
   type: z.literal("deviceList"),
-  data: z.array(ClientService),
+  data: z.array(ServiceSchema),
 });
 
 export const DeviceStatusChangeSchema = VersionedMessageSchema.extend({
   type: z.literal("deviceStatusChange"),
-  data: ClientService,
+  data: ServiceSchema,
 });
 
-export const ClientMessage = z.union([
+export const ClientMessageSchema = z.discriminatedUnion("type", [
   DeviceListSchema,
   DeviceStatusChangeSchema,
 ]);
 
-export type ClientMessage = z.infer<typeof ClientMessage>;
+export type ClientMessage = z.infer<typeof ClientMessageSchema>;
