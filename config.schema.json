@@ -2,6 +2,8 @@
   "pluginAlias": "HomebridgeAI",
   "pluginType": "platform",
   "singular": true,
+  "headerDisplay": "Welcome to HomebridgeAI. You can learn more at (homebridgeai.com][https://homebridgeai.com])",
+  "footerDisplay": "",
   "schema": {
     "type": "object",
     "properties": {
@@ -9,19 +11,44 @@
         "title": "API Key",
         "type": "string",
         "required": true,
-        "default": "??"
+        "default": "",
+        "description": "You can find this at https://homebridgeai.com/account/"
       },
       "pin": {
         "title": "Homebridge PIN",
         "type": "string",
         "required": false,
-        "default": "000-00-000"
+        "placeholder": "000-00-000",
+        "description": "Advanced setting. We'll use this instance's PIN by default"
       },
-      "name": {
-        "title": "Name",
-        "type": "string",
-        "required": true,
-        "default": "HomebridgeAI"
+      "disabled_modes": {
+        "condition": {
+          "functionBody": "false"
+        },
+        "description": "(Not yet in use)",
+        "title": "Disabled Accessory Types",
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "title": "Disabled Types",
+          "type": "string",
+          "enum": [
+            "BatteryService",
+            "InputSource",
+            "Lightbulb",
+            "LightSensor",
+            "MotionSensor",
+            "Outlet",
+            "ProtocolInformation",
+            "ServiceLabel",
+            "Speaker",
+            "StatelessProgrammableSwitch",
+            "Switch",
+            "Television",
+            "TemperatureSensor",
+            "Thermostat"
+          ]
+        }
       }
     }
   }
