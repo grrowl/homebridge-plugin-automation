@@ -20,6 +20,8 @@ import { ClientMessage, MetricsData } from "./schemas/ClientMessage";
 const START_MONITORING_DELAY = 4_000;
 // send a full state update to the server (assuming all instances have been discovered)
 const SEND_STATE_DELAY = 20_000;
+// don't backoff further than 15 minutes
+const MAX_BACKOFF = 1000 * 60 * 15;
 // don't flood metrics
 const METRIC_DEBOUNCE = 1_500;
 
@@ -148,13 +150,18 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
     this.socket.on("close", () => {
       this.socketReady = false;
-      this.log.warn("Disconnected from server, attempting to reconnect...");
+      const timeout = Math.min(
+        1000 * Math.pow(2, this.reconnectAttempts),
+        MAX_BACKOFF,
+      );
+      this.log.warn(
+        `Disconnected from server, waiting to reconnect... (${Math.floor(
+          timeout / 1000,
+        )}s)`,
+      );
       this.reconnectAttempts++;
       this.incrementMetric("reconnectAttempts");
-      setTimeout(
-        () => this.connectSocket(),
-        1000 * Math.pow(2, this.reconnectAttempts),
-      ); // exponential backoff
+      setTimeout(() => this.connectSocket(), timeout); // exponential backoff
     });
   }
 
