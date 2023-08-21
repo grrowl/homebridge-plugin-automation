@@ -7,7 +7,6 @@ import type {
   PlatformAccessory,
   PlatformConfig,
 } from "homebridge";
-import qs from "node:querystring";
 import WebSocket from "ws";
 import { ServerMessage, ServerMessageSchema } from "./schemas/ServerMessage";
 import { UPSTREAM_API } from "./settings";
@@ -97,10 +96,12 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   }
 
   connectSocket(): void {
-    const wsQuery = qs.stringify({ apiKey: this.config.apiKey });
-    const wsAddress = new URL(`${UPSTREAM_API}?${wsQuery}`);
+    const wsAddress = new URL(`${UPSTREAM_API}`);
     this.log.debug(`Connecting to ${wsAddress}`);
     this.socket = new WebSocket(wsAddress, {
+      headers: {
+        Authorization: `Bearer ${this.config.apiKey}`,
+      },
       rejectUnauthorized: process.env.NODE_ENV !== "development", // allow self-signed certs in dev
     });
 
