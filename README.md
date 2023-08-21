@@ -6,7 +6,7 @@
 
 # homebridge-ai
 
-Control your homebridge instance with AI. Check it out at [homebridgeai.com](http://homebridgeai.com)
+Control your homebridge instance with AI. Check it out at https://homebridgeai.com/
 
 ## Local testing
 

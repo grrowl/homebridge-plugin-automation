@@ -12,7 +12,7 @@
         "type": "string",
         "required": true,
         "default": "",
-        "description": "You can find this at https://homebridgeai.com/account/"
+        "description": "You can find this under \"Your Account\""
       },
       "pin": {
         "title": "Homebridge PIN",
