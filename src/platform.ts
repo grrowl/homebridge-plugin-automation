@@ -133,7 +133,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
             // messageParse.error,
           );
           this.log.warn(
-            `-> https://homebridgeai.com/help/invalid-servermessage`,
+            `→ https://homebridgeai.com/help/invalid-servermessage`,
           );
           this.incrementMetric("invalidServerMessages");
           return;
@@ -143,7 +143,14 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     });
 
     this.socket.on("error", (error) => {
-      this.log.error("Connection error:", error);
+      this.log.error("Connection error:", error.message);
+
+      if (/Unexpected server response: 401/.test(error.message)) {
+        this.log.warn(
+          `→ Your HomebridgeAI API key is incorrect. Please visit https://homebridgeai.com/help/invalid-api-key`,
+        );
+      }
+
       this.incrementMetric("connectionErrors");
       // 'close' will also be called
     });
