@@ -4,6 +4,7 @@
   "version": "0.6.1",
   "description": "Bring AI control to your home",
   "license": "Apache-2.0",
+  "homepage": "https://homebridgeai.com/",
   "repository": {
     "type": "git",
     "url": "https://github.com/grrowl/homebridge-ai.git"
