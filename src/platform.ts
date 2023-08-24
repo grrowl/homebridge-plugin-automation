@@ -150,6 +150,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       }
     });
 
+    let addTimeout = 0;
     this.socket.on("error", (error) => {
       this.log.error("Connection error:", error.message);
 
@@ -157,6 +158,9 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
         this.log.warn(
           `→ Your HomebridgeAI API key is incorrect. Please visit https://homebridgeai.com/help/invalid-api-key`,
         );
+        addTimeout += 120_000;
+      } else if (/Unexpected server response: 429/.test(error.message)) {
+        addTimeout += 10_000;
       }
 
       this.incrementMetric("connectionErrors");
@@ -165,10 +169,9 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
     this.socket.on("close", () => {
       this.socketReady = false;
-      const timeout = Math.min(
-        1000 * Math.pow(2, this.reconnectAttempts),
-        MAX_BACKOFF,
-      );
+      const timeout =
+        Math.min(1000 * Math.pow(2, this.reconnectAttempts), MAX_BACKOFF) +
+        addTimeout;
       this.log.warn(
         `Disconnected from server, waiting to reconnect... (${Math.floor(
           timeout / 1000,
