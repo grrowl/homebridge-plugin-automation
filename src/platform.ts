@@ -63,7 +63,14 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     this.hap = new HapClient({
       pin,
       // logger: this.log,
-      logger: console,
+      logger:
+        process.env.NODE_ENV === "development"
+          ? console
+          : {
+              log: () => {},
+              error: (e: any) => this.log.error(e),
+              warn: (e: any) => this.log.warn(e),
+            },
       config: {
         debug: true,
       },
