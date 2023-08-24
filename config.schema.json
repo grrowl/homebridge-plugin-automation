@@ -2,7 +2,7 @@
   "pluginAlias": "HomebridgeAI",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Welcome to HomebridgeAI. You can learn more at (homebridgeai.com][https://homebridgeai.com])",
+  "headerDisplay": "Welcome to HomebridgeAI. You can learn more at https://homebridgeai.com",
   "footerDisplay": "",
   "schema": {
     "type": "object",
