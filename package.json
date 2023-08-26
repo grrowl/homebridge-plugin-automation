@@ -2,7 +2,7 @@
   "displayName": "HomebridgeAI",
   "name": "homebridge-ai",
   "version": "0.6.2",
-  "description": "Bring AI control to your home",
+  "description": "Command and automate your home using natural language from anywhere.",
   "license": "Apache-2.0",
   "homepage": "https://homebridgeai.com/",
   "repository": {
@@ -24,7 +24,20 @@
     "prepublishOnly": "npm run lint && npm run build"
   },
   "keywords": [
-    "homebridge-plugin"
+    "homebridge-plugin",
+    "homebridgeai",
+    "homekit",
+    "ai",
+    "gpt",
+    "assistant",
+    "chat",
+    "remote",
+    "whatsapp",
+    "shortcuts",
+    "ios",
+    "android",
+    "delay",
+    "automation"
   ],
   "dependencies": {
     "@oznu/hap-client": "^1.9.0",
