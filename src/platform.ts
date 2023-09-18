@@ -23,6 +23,8 @@ const SEND_STATE_DELAY = 20_000;
 const MAX_BACKOFF = 1000 * 60 * 15;
 // don't flood metrics
 const METRIC_DEBOUNCE = 1_500;
+// only reset reconnection backoff once the connection is open for 5 seconds
+const CONNECTION_RESET_DELAY = 5_000;
 
 export class HomebridgeAI implements DynamicPlatformPlugin {
   private socket?: WebSocket;
@@ -118,7 +120,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
       resetReconnectTimeout = setTimeout(() => {
         this.reconnectAttempts = 0; // reset reconnect attempts
-      });
+      }, CONNECTION_RESET_DELAY);
 
       this.incrementMetric("connectionCount");
       this.socketReady = true;
@@ -172,19 +174,37 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       // 'close' will also be called
     });
 
-    this.socket.on("close", (_code) => {
+    this.socket.on("close", (code) => {
       this.socketReady = false;
       const timeout =
         Math.min(1000 * Math.pow(2, this.reconnectAttempts), MAX_BACKOFF) +
         addTimeout;
+
+      clearTimeout(resetReconnectTimeout); // if connection closes soon after opening, we don't reset counter
+      this.reconnectAttempts++;
+      this.incrementMetric("reconnectAttempts");
+
+      switch (code) {
+        case 1000:
+          break;
+        case 1012:
+          this.log.info(`Server restarting`);
+          break;
+        case 1009:
+        case 1003:
+          this.log.warn(
+            `Failed to send update. You may need to update homebridge-ai`,
+          );
+          break;
+        default:
+          this.log.warn(`Connection error: ${code}`);
+      }
+
       this.log.warn(
         `Disconnected from server, waiting to reconnect... (${Math.floor(
           timeout / 1000,
         )}s)`,
       );
-      clearTimeout(resetReconnectTimeout); // if connection closes soon after opening, we don't reset counter
-      this.reconnectAttempts++;
-      this.incrementMetric("reconnectAttempts");
       setTimeout(() => this.connectSocket(), timeout); // exponential backoff
     });
   }
