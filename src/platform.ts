@@ -112,9 +112,14 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       rejectUnauthorized: process.env.NODE_ENV !== "development", // allow self-signed certs in dev
     });
 
+    let resetReconnectTimeout: NodeJS.Timeout;
     this.socket.on("open", () => {
       this.log.info("Server connection ready");
-      this.reconnectAttempts = 0; // reset reconnect attempts
+
+      resetReconnectTimeout = setTimeout(() => {
+        this.reconnectAttempts = 0; // reset reconnect attempts
+      });
+
       this.incrementMetric("connectionCount");
       this.socketReady = true;
       this.flushMessageBuffer();
@@ -167,7 +172,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       // 'close' will also be called
     });
 
-    this.socket.on("close", () => {
+    this.socket.on("close", (_code) => {
       this.socketReady = false;
       const timeout =
         Math.min(1000 * Math.pow(2, this.reconnectAttempts), MAX_BACKOFF) +
@@ -177,6 +182,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
           timeout / 1000,
         )}s)`,
       );
+      clearTimeout(resetReconnectTimeout); // if connection closes soon after opening, we don't reset counter
       this.reconnectAttempts++;
       this.incrementMetric("reconnectAttempts");
       setTimeout(() => this.connectSocket(), timeout); // exponential backoff
