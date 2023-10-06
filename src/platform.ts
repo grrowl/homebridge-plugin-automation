@@ -174,7 +174,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       // 'close' will also be called
     });
 
-    this.socket.on("close", (code) => {
+    this.socket.on("close", (code, reason) => {
       this.socketReady = false;
       const timeout =
         Math.min(1000 * Math.pow(2, this.reconnectAttempts), MAX_BACKOFF) +
@@ -187,17 +187,19 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
       switch (code) {
         case 1000:
           break;
-        case 1012:
+        case 1012: // server restarting
           this.log.info(`Server restarting`);
+          break;
+        case 1006: // connection closed abnormaly
           break;
         case 1009:
         case 1003:
           this.log.warn(
-            `Failed to send update. You may need to update homebridge-ai`,
+            `Update not accepted: ${reason}. You may need to update homebridge-ai`,
           );
           break;
         default:
-          this.log.warn(`Connection error: ${code}`);
+          this.log.warn(`Connection error: ${code} ${reason.toString()}`);
       }
 
       this.log.warn(
