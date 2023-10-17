@@ -1,4 +1,9 @@
-import { HapClient, HapInstance, ServiceType } from "@oznu/hap-client";
+import {
+  CharacteristicType,
+  HapClient,
+  HapInstance,
+  ServiceType,
+} from "@oznu/hap-client";
 import { HapMonitor } from "@oznu/hap-client/dist/monitor";
 import type {
   DynamicPlatformPlugin,
@@ -315,9 +320,11 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
           (c) => c.iid === data.iid,
         );
         this.log.info(
-          `Setting ${service.serviceName}: ${infoCharacteristic?.type}/${data.iid} to ${data.value}`,
+          `Set ${service.serviceName}/${service.uniqueId?.substring(0, 3)}: ${
+            infoCharacteristic?.type
+          }/${data.iid} to ${data.value}`,
         );
-        this.handleMessageAction(
+        this.handleCharacteristicAction(
           this.hap.setCharacteristic(service, data.iid, data.value),
         );
 
@@ -332,12 +339,18 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   }
 
   // generic async handler for ServerMessages (since handleMessage must be sync)
-  handleMessageAction<T>(promise: Promise<T>) {
+  handleCharacteristicAction<T extends CharacteristicType>(
+    promise: Promise<T>,
+  ) {
     promise
-      .then((value) => this.log.debug("ServerMessage processed", value))
-      .catch((error) =>
-        this.log.error("ServerMessage error processing", error),
-      );
+      .then((char: T) => {
+        this.log.debug(
+          `Set ${char.serviceName} result: ${char?.type}/${char.iid} to ${char.value}`,
+        );
+      })
+      .catch((error) => {
+        this.log.error("Set error", error);
+      });
   }
 
   incrementMetric(metric: keyof MetricsData) {
