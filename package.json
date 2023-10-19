@@ -1,7 +1,7 @@
 {
   "displayName": "HomebridgeAI",
   "name": "homebridge-ai",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "description": "Command and automate your home using natural language from anywhere.",
   "license": "Apache-2.0",
   "homepage": "https://homebridgeai.com/",
