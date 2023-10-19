@@ -21,6 +21,9 @@ export const MetricsChangeSchema = VersionedMessageSchema.extend({
     .object({
       invalidServices: z.number(),
       invalidServerMessages: z.number(),
+      setOK: z.number(),
+      setIneffective: z.number(),
+      setError: z.number(),
       connectionCount: z.number(),
       connectionErrors: z.number(),
       reconnectAttempts: z.number(),

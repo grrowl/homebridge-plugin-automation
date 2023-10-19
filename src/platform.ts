@@ -361,10 +361,14 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
               char.value
             }/${typeof char.value} (expected ${expectedValue}/${typeof expectedValue})`,
           );
+          this.incrementMetric("setIneffective");
+        } else {
+          this.incrementMetric("setOK");
         }
       })
       .catch((error) => {
         this.log.error("Set error", error);
+        this.incrementMetric("setError");
       });
   }
 
