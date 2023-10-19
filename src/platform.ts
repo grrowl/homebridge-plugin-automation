@@ -316,16 +316,23 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
           return false;
         }
 
-        const infoCharacteristic = service.serviceCharacteristics.find(
+        const characteristic = service.serviceCharacteristics.find(
           (c) => c.iid === data.iid,
         );
+        if (!characteristic) {
+          this.log.error(
+            `Characteristic ${data.iid} on service ${service.uniqueId} not found`,
+          );
+          return false;
+        }
         this.log.info(
           `Set ${service.serviceName}/${service.uniqueId?.substring(0, 3)}: ${
-            infoCharacteristic?.type
+            characteristic.type
           }/${data.iid} to ${data.value}`,
         );
         this.handleCharacteristicAction(
           this.hap.setCharacteristic(service, data.iid, data.value),
+          data.value,
         );
 
         break;
@@ -341,12 +348,20 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
   // generic async handler for ServerMessages (since handleMessage must be sync)
   handleCharacteristicAction<T extends CharacteristicType>(
     promise: Promise<T>,
+    expectedValue: string | number | boolean,
   ) {
     promise
       .then((char: T) => {
         this.log.debug(
           `Set ${char.serviceName} result: ${char?.type}/${char.iid} to ${char.value}`,
         );
+        if (char.value !== expectedValue) {
+          this.log.warn(
+            `Set ${char.serviceName} ${char?.type}/${char.iid} to ${
+              char.value
+            }/${typeof char.value} (expected ${expectedValue}/${typeof expectedValue})`,
+          );
+        }
       })
       .catch((error) => {
         this.log.error("Set error", error);
