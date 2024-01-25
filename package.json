@@ -2,7 +2,7 @@
   "displayName": "Homebridge Automation",
   "name": "homebridge-automation",
   "version": "0.1.0",
-  "description": "Command and automate your home using natural language from anywhere.",
+  "description": "Command and automate your home using Javascript.",
   "license": "Apache-2.0",
   "homepage": "https://tommckenzie.dev/homebridge-automation",
   "repository": {

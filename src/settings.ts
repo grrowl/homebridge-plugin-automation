@@ -1,6 +1,5 @@
-export const PLATFORM_NAME = "HomebridgeAI";
+export const PLATFORM_NAME = "HomebridgeAutomation";
 
 export const PLUGIN_NAME = "homebridge-automation";
 
-export const UPSTREAM_API =
-  process.env.AI_UPSTREAM_API || "wss://homebridgeai.com/hb-api";
+export const UPSTREAM_API = process.env.UPSTREAM_API;

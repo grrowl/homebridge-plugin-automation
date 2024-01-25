@@ -1,12 +1,48 @@
 # homebridge-automation
 
-Control your homebridge instance with Javascript functions.
+Control your homebridge instance with Javascript.
 
-## Local testing
+## Examples
+
+(sorry this is so gnarly, we can improve the interface in `PLATFORM_SCRIPT`)
+
+```js
+function onMessage(event) {
+  if (event.type === "Lightbulb") {
+  }
+  if (event.name === "Book Globe") {
+  }
+
+  if (event.name === "Motion Sensor") {
+    if (
+      event.serviceCharacteristics.find(
+        (c) => c.name === "Active" && c.value === true,
+      )
+    ) {
+      const light = automation.services.find((s) => s.name === "Book Globe");
+      if (light) {
+        const on = light.serviceCharacteristics.find((s) => s.type === "On");
+        if (on) {
+          automation.set(light.uniqueId, on.iid, 1);
+        }
+      }
+      automation.set();
+    }
+  }
+}
+```
+
+## API
+
+See `schemas/Service.ts` and `schemas/Characteristic.ts`
+
+## Development
+
+### Local testing
 
 Simply run `npm run watch` to start. By default it uses the config at `~/.homebridge/config.json`, so if you want to discover local network instance add the correct PIN for your Homebridge instance there.
 
-## Local testing (in docker)
+### Local testing (in docker)
 
 This runs segregated from your local network for more specific testing scenarios.
 
@@ -18,7 +54,7 @@ Then open homebridge UI: http://localhost:18581/
 
 ---
 
-## Link To Homebridge
+### Link To Homebridge
 
 Run this command so your global install of Homebridge can discover the plugin in your development environment:
 
@@ -32,7 +68,7 @@ You can now start Homebridge, use the `-D` flag so you can see debug log message
 homebridge -D
 ```
 
-#### Installing Beta Versions
+### Installing Beta Versions
 
 You can install _beta_ versions of this plugin by appending `@beta` to the install command, for example:
 

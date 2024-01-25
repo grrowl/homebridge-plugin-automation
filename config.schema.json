@@ -11,9 +11,9 @@
         "title": "Automation JS",
         "type": "string",
         "required": false,
-        "placeholder": "function (event, act) {}",
-        "default": "function (event, act) {}",
-        "description": "Function to run on every change"
+        "placeholder": "function onMessage(event) {}",
+        "default": "function onMessage(event) {}",
+        "description": "Function to run on every change, must be called onEvent"
       },
       "pin": {
         "title": "Homebridge PIN",

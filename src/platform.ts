@@ -32,10 +32,27 @@ const METRIC_DEBOUNCE = 1_500;
 // only reset reconnection backoff once the connection is open for 5 seconds
 const CONNECTION_RESET_DELAY = 5_000;
 
+const VM_MEMORY_LIMIT_MB = 128;
+
 const PLATFORM_SCRIPT = `
 const automation = {
+  services: [];
+
+  handleMessage(message) {
+    if (message.type === "deviceStatusChange") {
+      onMessage(message.data);
+      const service = automation.services.find(s => s.uniqueId === message.data.uniqueId);
+      if (service) {
+        Object.assign(service, message.data);
+      }
+    }
+    if (message.type === "deviceList") {
+      automation.services = message.data;
+    }
+  }
+
   set(serviceId, iid, value) {
-    isolate.postMessage(JSON.stringify({
+    __host({
       version: 1,
       type: "SetCharacteristic",
       data: {
@@ -43,7 +60,7 @@ const automation = {
         iid,
         value,
       },
-    }));
+    });
   }
 }
 `;
@@ -80,38 +97,9 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
     }
 
     if (this.config.automationJs) {
-      this.isolate = new ivm.Isolate({ memoryLimit: 128 });
-      this.context = this.isolate.createContextSync({});
-      const contextGlobal = this.context.global;
-      // contextGlobal.setSync("global", contextGlobal.derefInto());
-
-      const platformScript = this.isolate.compileScriptSync(PLATFORM_SCRIPT);
-      platformScript.runSync(this.context);
-
-      const script = this.isolate.compileScriptSync(this.config.automationJs);
-      script.runSync(this.context);
-
-      // contextGlobal.getSync("global").on("message", (msg) => {});
-
-      // this.context.evalClosureSync
-      // this.isolate.setMicrotask(async () => {
-      //   const message = await this.isolate.receiveMessage();
-      //   console.log(message); // Output: "Hello from the isolated environment!"
-      // });
-
-      // Compile and run a script in the context of the isolate
-      const eventScript = this.isolate.compileScriptSync(`
-      function myFunction() {
-        return 'Hello from isolated environment!';
-      }
-      myFunction();
-      `);
-      script.runSync(this.context);
-
-      const result = contextGlobal.getSync("foo");
-      if (result) {
-        this.log.debug(`Automation result:\n${JSON.stringify(result)}`);
-      }
+      this.initVm().catch((error) => {
+        this.log.error("Error initializing Automation VM", error);
+      });
     }
 
     // Connect to Homebridge in insecure mode
@@ -160,6 +148,57 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
     }, SEND_STATE_DELAY);
   }
 
+  // do this async so we don't hold up Homebridge
+  async initVm(): Promise<void> {
+    this.isolate = new ivm.Isolate({ memoryLimit: VM_MEMORY_LIMIT_MB });
+    this.context = await this.isolate.createContext({});
+    const jail = this.context.global;
+
+    await jail.set("global", jail.derefInto());
+    await jail.set(
+      "__host",
+      new ivm.Reference((data) => {
+        this.handleVm(data);
+      }),
+    );
+
+    const platformScript = await this.isolate.compileScript(PLATFORM_SCRIPT);
+    await platformScript.run(this.context);
+
+    const script = await this.isolate.compileScript(this.config.automationJs);
+    await script.run(this.context);
+
+    const result = await jail.get("foo");
+    if (result) {
+      this.log.debug(`Automation result:\n${JSON.stringify(result)}`);
+    }
+  }
+
+  handleVm(data: unknown) {
+    const messageParse = ServerMessageSchema.safeParse(data);
+    if (!messageParse.success) {
+      this.log.error(
+        `Invalid message from VM`,
+        // messageParse.error,
+      );
+      this.incrementMetric("invalidServerMessages");
+      return;
+    }
+    this.handleMessage(messageParse.data);
+  }
+
+  async invokeVm(message: ClientMessage) {
+    if (!this.context || !this.isolate) {
+      return;
+    }
+
+    const result = await this.context.evalClosure(
+      `automation.handleMessage($0);`,
+      [message],
+    );
+    this.log.debug(`Automation result:\n${JSON.stringify(result)}`);
+  }
+
   connectSocket(): void {
     const wsAddress = new URL(
       UPSTREAM_API ? String(UPSTREAM_API) : this.config.remoteHost,
@@ -202,11 +241,8 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
         const messageParse = ServerMessageSchema.safeParse(raw);
         if (!messageParse.success) {
           this.log.error(
-            `Invalid ServerMessage -- please update homebridge-ai to the latest version`,
+            `Invalid ServerMessage`,
             // messageParse.error,
-          );
-          this.log.warn(
-            `→ https://homebridgeai.com/help/invalid-servermessage`,
           );
           this.incrementMetric("invalidServerMessages");
           return;
@@ -220,9 +256,7 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
       this.log.error("Connection error:", error.message);
 
       if (/Unexpected server response: 401/.test(error.message)) {
-        this.log.warn(
-          `→ Your HomebridgeAI API key is incorrect. Please visit https://homebridgeai.com/help/invalid-api-key`,
-        );
+        this.log.warn(`→ Your Control server API key is incorrect`);
         addTimeout += 120_000;
       } else if (/Unexpected server response: 429/.test(error.message)) {
         addTimeout += 10_000;
@@ -329,11 +363,12 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
       version: 1,
       ...message,
     };
-    const json = JSON.stringify(versionedMessage);
 
     if (this.config.automationJs) {
+      this.invokeVm(versionedMessage as any);
     }
     if (this.config.remoteEnabled) {
+      const json = JSON.stringify(versionedMessage);
       if (this.socketReady) {
         this.socket?.send(json);
       } else {
