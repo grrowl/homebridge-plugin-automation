@@ -1,10 +1,10 @@
 import EventEmitter from "node:events";
-import { HomebridgeAI } from "./platform";
+import { HomebridgeAutomation } from "./platform";
 import { Logger } from "homebridge/lib/logger";
 
 class FakeAPI extends EventEmitter {}
 
-const instance = new HomebridgeAI(
+const instance = new HomebridgeAutomation(
   new Logger(),
   {} as any,
   new FakeAPI() as any,

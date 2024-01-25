@@ -31,7 +31,7 @@ const METRIC_DEBOUNCE = 1_500;
 // only reset reconnection backoff once the connection is open for 5 seconds
 const CONNECTION_RESET_DELAY = 5_000;
 
-export class HomebridgeAI implements DynamicPlatformPlugin {
+export class HomebridgeAutomation implements DynamicPlatformPlugin {
   private socket?: WebSocket;
   private reconnectAttempts = 0;
   private messageBuffer: string[] = [];
@@ -55,14 +55,7 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     const pin = config.pin || findConfigPin(this.api);
     if (!pin) {
       this.log.error(
-        "Homebridge-AI requires a PIN to be configured in the config.json",
-      );
-    }
-
-    const apiKey = config.apiKey;
-    if (!apiKey) {
-      this.log.error(
-        "Homebridge-AI requires an API Key to be configured in the config.json",
+        "HomebridgeAutomation requires a PIN to be configured in the config.json",
       );
     }
 
@@ -96,7 +89,9 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     // APIEvent.DID_FINISH_LAUNCHING
     this.api.on("didFinishLaunching", () => {
       this.log.info("Launching...");
-      this.connectSocket();
+      if (config.remoteEnabled) {
+        this.connectSocket();
+      }
     });
     // APIEvent.SHUTDOWN
     this.api.on("shutdown", () => {
@@ -105,12 +100,16 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     });
 
     setTimeout(async () => {
-      this.sendStateUpdate();
+      if (!this.config.remoteEnabled) {
+        this.sendStateUpdate();
+      }
     }, SEND_STATE_DELAY);
   }
 
   connectSocket(): void {
-    const wsAddress = new URL(`${UPSTREAM_API}`);
+    const wsAddress = new URL(
+      UPSTREAM_API ? String(UPSTREAM_API) : this.config.remoteHost,
+    );
     this.log.debug(`Connecting to ${wsAddress}`);
     this.socket = new WebSocket(wsAddress, {
       headers: {
@@ -229,12 +228,14 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
     this.hapMonitor.on("service-update", (responses) => {
       // no need to update this.servicesCache as this is only characteristic updates -- cache will be out of date for characteristic state.
 
-      responses.forEach((response) => {
-        this.sendMessage({
-          type: "deviceStatusChange",
-          data: response,
+      if (!this.config.remoteEnabled) {
+        responses.forEach((response) => {
+          this.sendMessage({
+            type: "deviceStatusChange",
+            data: response,
+          });
         });
-      });
+      }
     });
   }
 
@@ -374,7 +375,9 @@ export class HomebridgeAI implements DynamicPlatformPlugin {
 
   incrementMetric(metric: keyof MetricsData) {
     this.metrics[metric] = (this.metrics[metric] || 0) + 1;
-    this.sendMetrics();
+    if (!this.config.remoteEnabled) {
+      this.sendMetrics();
+    }
   }
 
   private debounceTimeout?: NodeJS.Timeout;

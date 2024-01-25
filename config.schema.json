@@ -1,25 +1,47 @@
 {
-  "pluginAlias": "HomebridgeAI",
+  "pluginAlias": "HomebridgeAutomation",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Welcome to HomebridgeAI. You can learn more at https://homebridgeai.com",
+  "headerDisplay": "Homebridge Automation settings",
   "footerDisplay": "",
   "schema": {
     "type": "object",
     "properties": {
-      "apiKey": {
-        "title": "API Key",
+      "automationJs": {
+        "title": "Automation JS",
         "type": "string",
-        "required": true,
-        "default": "",
-        "description": "You can find this under \"Your Account\""
+        "required": false,
+        "placeholder": "function (event, act) {}",
+        "default": "function (event, act) {}",
+        "description": "Function to run on every change"
       },
       "pin": {
         "title": "Homebridge PIN",
         "type": "string",
         "required": false,
         "placeholder": "000-00-000",
-        "description": "Advanced setting. We'll use this instance's PIN by default"
+        "description": "We'll use this instance's PIN by default"
+      },
+      "remoteEnabled": {
+        "title": "Remote Control enabled",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": "Connect to websocket control server"
+      },
+      "remoteHost": {
+        "title": "Remote Control host",
+        "type": "string",
+        "required": false,
+        "default": "127.0.0.1",
+        "description": "Can be overridden by env UPSTREAM_API (does not apply if enabled is not set)"
+      },
+      "apiKey": {
+        "title": "Remote Control API Key",
+        "type": "string",
+        "required": false,
+        "default": "",
+        "description": ""
       },
       "disabled_modes": {
         "condition": {

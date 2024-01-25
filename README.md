@@ -1,12 +1,6 @@
-<p align="center" style="vertial-align:middle;">
+# homebridge-automation
 
-<img src="https://github.com/homebridge/branding/raw/master/logos/homebridge-wordmark-logo-vertical.png" width="150"> + <strong>AI</strong>
-
-</p>
-
-# homebridge-ai
-
-Control your homebridge instance with AI. Check it out at https://homebridgeai.com/
+Control your homebridge instance with Javascript functions.
 
 ## Local testing
 
@@ -17,7 +11,7 @@ Simply run `npm run watch` to start. By default it uses the config at `~/.homebr
 This runs segregated from your local network for more specific testing scenarios.
 
 ```shell
-docker run --name=homebridge-ai -p 18581:8581 -v $(pwd)/homebridge:/homebridge -v $(pwd):/var/lib/homebridge-ai homebridge/homebridge:latest; docker rm homebridge-ai
+docker run --name=homebridge-automation -p 18581:8581 -v $(pwd)/homebridge:/homebridge -v $(pwd):/var/lib/homebridge-automation homebridge/homebridge:latest; docker rm homebridge-automation
 ```
 
 Then open homebridge UI: http://localhost:18581/
