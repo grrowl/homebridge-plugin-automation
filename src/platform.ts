@@ -19,6 +19,7 @@ import { debounce } from "./util/debounce";
 import { findConfigPin } from "./util/findConfigPin";
 import { ServiceSchema } from "./schemas/Service";
 import { ClientMessage, MetricsData } from "./schemas/ClientMessage";
+import ivm from "isolated-vm";
 
 // how long after the last instance was discovered to start monitoring
 const START_MONITORING_DELAY = 4_000;
@@ -31,6 +32,22 @@ const METRIC_DEBOUNCE = 1_500;
 // only reset reconnection backoff once the connection is open for 5 seconds
 const CONNECTION_RESET_DELAY = 5_000;
 
+const PLATFORM_SCRIPT = `
+const automation = {
+  set(serviceId, iid, value) {
+    isolate.postMessage(JSON.stringify({
+      version: 1,
+      type: "SetCharacteristic",
+      data: {
+        serviceId,
+        iid,
+        value,
+      },
+    }));
+  }
+}
+`;
+
 export class HomebridgeAutomation implements DynamicPlatformPlugin {
   private socket?: WebSocket;
   private reconnectAttempts = 0;
@@ -40,6 +57,9 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
   private hap: HapClient;
   private hapMonitor?: HapMonitor;
   private hapReady = false;
+
+  private isolate: ivm.Isolate | undefined;
+  private context: ivm.Context | undefined;
 
   private servicesCache: ServiceType[] = [];
 
@@ -57,6 +77,41 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
       this.log.error(
         "HomebridgeAutomation requires a PIN to be configured in the config.json",
       );
+    }
+
+    if (this.config.automationJs) {
+      this.isolate = new ivm.Isolate({ memoryLimit: 128 });
+      this.context = this.isolate.createContextSync({});
+      const contextGlobal = this.context.global;
+      // contextGlobal.setSync("global", contextGlobal.derefInto());
+
+      const platformScript = this.isolate.compileScriptSync(PLATFORM_SCRIPT);
+      platformScript.runSync(this.context);
+
+      const script = this.isolate.compileScriptSync(this.config.automationJs);
+      script.runSync(this.context);
+
+      // contextGlobal.getSync("global").on("message", (msg) => {});
+
+      // this.context.evalClosureSync
+      // this.isolate.setMicrotask(async () => {
+      //   const message = await this.isolate.receiveMessage();
+      //   console.log(message); // Output: "Hello from the isolated environment!"
+      // });
+
+      // Compile and run a script in the context of the isolate
+      const eventScript = this.isolate.compileScriptSync(`
+      function myFunction() {
+        return 'Hello from isolated environment!';
+      }
+      myFunction();
+      `);
+      script.runSync(this.context);
+
+      const result = contextGlobal.getSync("foo");
+      if (result) {
+        this.log.debug(`Automation result:\n${JSON.stringify(result)}`);
+      }
     }
 
     // Connect to Homebridge in insecure mode
@@ -97,12 +152,11 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
     this.api.on("shutdown", () => {
       this.log.info("Shutting down");
       this.hapMonitor?.finish();
+      this.isolate?.dispose();
     });
 
     setTimeout(async () => {
-      if (!this.config.remoteEnabled) {
-        this.sendStateUpdate();
-      }
+      this.sendStateUpdate();
     }, SEND_STATE_DELAY);
   }
 
@@ -228,14 +282,12 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
     this.hapMonitor.on("service-update", (responses) => {
       // no need to update this.servicesCache as this is only characteristic updates -- cache will be out of date for characteristic state.
 
-      if (!this.config.remoteEnabled) {
-        responses.forEach((response) => {
-          this.sendMessage({
-            type: "deviceStatusChange",
-            data: response,
-          });
+      responses.forEach((response) => {
+        this.sendMessage({
+          type: "deviceStatusChange",
+          data: response,
         });
-      }
+      });
     });
   }
 
@@ -278,11 +330,16 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
       ...message,
     };
     const json = JSON.stringify(versionedMessage);
-    if (this.socketReady) {
-      this.socket?.send(json);
-    } else {
-      this.messageBuffer.push(json);
-      this.incrementMetric("bufferedMessages");
+
+    if (this.config.automationJs) {
+    }
+    if (this.config.remoteEnabled) {
+      if (this.socketReady) {
+        this.socket?.send(json);
+      } else {
+        this.messageBuffer.push(json);
+        this.incrementMetric("bufferedMessages");
+      }
     }
   }
 
@@ -375,7 +432,7 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
 
   incrementMetric(metric: keyof MetricsData) {
     this.metrics[metric] = (this.metrics[metric] || 0) + 1;
-    if (!this.config.remoteEnabled) {
+    if (this.config.remoteEnabled) {
       this.sendMetrics();
     }
   }
