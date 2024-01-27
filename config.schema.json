@@ -13,7 +13,7 @@
         "required": false,
         "placeholder": "function onMessage(event) {}",
         "default": "function onMessage(event) {}",
-        "description": "Function to run on every change, must be called onEvent"
+        "description": "Function to run on every change, must be called onEvent. DO NOT ENTER UNTRUSTED CODE."
       },
       "pin": {
         "title": "Homebridge PIN",

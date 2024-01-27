@@ -20,6 +20,7 @@ import { findConfigPin } from "./util/findConfigPin";
 import { ServiceSchema } from "./schemas/Service";
 import { ClientMessage, MetricsData } from "./schemas/ClientMessage";
 import ivm from "isolated-vm";
+import { PLATFORM_SCRIPT } from "./platformApi";
 
 // how long after the last instance was discovered to start monitoring
 const START_MONITORING_DELAY = 4_000;
@@ -33,37 +34,6 @@ const METRIC_DEBOUNCE = 1_500;
 const CONNECTION_RESET_DELAY = 5_000;
 
 const VM_MEMORY_LIMIT_MB = 128;
-
-const PLATFORM_SCRIPT = `
-const automation = {
-  services: [];
-
-  handleMessage(message) {
-    if (message.type === "deviceStatusChange") {
-      onMessage(message.data);
-      const service = automation.services.find(s => s.uniqueId === message.data.uniqueId);
-      if (service) {
-        Object.assign(service, message.data);
-      }
-    }
-    if (message.type === "deviceList") {
-      automation.services = message.data;
-    }
-  }
-
-  set(serviceId, iid, value) {
-    __host({
-      version: 1,
-      type: "SetCharacteristic",
-      data: {
-        serviceId,
-        iid,
-        value,
-      },
-    });
-  }
-}
-`;
 
 export class HomebridgeAutomation implements DynamicPlatformPlugin {
   private socket?: WebSocket;
@@ -196,7 +166,7 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
       `automation.handleMessage($0);`,
       [message],
     );
-    this.log.debug(`Automation result:\n${JSON.stringify(result)}`);
+    this.log.debug(`Automation result: ${JSON.stringify(result)}`);
   }
 
   connectSocket(): void {

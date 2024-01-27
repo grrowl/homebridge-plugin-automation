@@ -3,7 +3,7 @@
   "keepOrphans": false,
   "insecureMode": true,
   "env": {
-    "DEBUG": "homebridge-plugin-ai",
+    "DEBUG": "homebridge-plugin-automation",
     "NODE_ENV": "development",
     "AI_UPSTREAM_API": "wss://host.containers.internal:3000"
   }
