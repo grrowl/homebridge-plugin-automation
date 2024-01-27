@@ -12,15 +12,15 @@ import type {
   PlatformAccessory,
   PlatformConfig,
 } from "homebridge";
+import ivm from "isolated-vm";
 import WebSocket from "ws";
+import { PLATFORM_API_JS, platformApi } from "./platformApi";
+import { ClientMessage, MetricsData } from "./schemas/ClientMessage";
 import { ServerMessage, ServerMessageSchema } from "./schemas/ServerMessage";
+import { ServiceSchema } from "./schemas/Service";
 import { UPSTREAM_API } from "./settings";
 import { debounce } from "./util/debounce";
 import { findConfigPin } from "./util/findConfigPin";
-import { ServiceSchema } from "./schemas/Service";
-import { ClientMessage, MetricsData } from "./schemas/ClientMessage";
-import ivm from "isolated-vm";
-import { PLATFORM_SCRIPT } from "./platformApi";
 
 // how long after the last instance was discovered to start monitoring
 const START_MONITORING_DELAY = 4_000;
@@ -67,6 +67,7 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
     }
 
     if (this.config.automationJs) {
+      this.log.debug("Automation JS enabled");
       this.initVm().catch((error) => {
         this.log.error("Error initializing Automation VM", error);
       });
@@ -120,7 +121,21 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
 
   // do this async so we don't hold up Homebridge
   async initVm(): Promise<void> {
-    this.isolate = new ivm.Isolate({ memoryLimit: VM_MEMORY_LIMIT_MB });
+    const isolate = new ivm.Isolate({ memoryLimit: VM_MEMORY_LIMIT_MB });
+
+    // Attempt to compile the script early; if it fails, we won't define this.isolate & context
+    let userScript: ivm.Script;
+    try {
+      userScript = await isolate.compileScript(this.config.automationJs);
+    } catch (error) {
+      this.log.error(
+        "Error compiling Automation script:",
+        String(error).split("\n").pop(),
+      );
+      return;
+    }
+
+    this.isolate = isolate;
     this.context = await this.isolate.createContext({});
     const jail = this.context.global;
 
@@ -132,16 +147,30 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
       }),
     );
 
-    const platformScript = await this.isolate.compileScript(PLATFORM_SCRIPT);
-    await platformScript.run(this.context);
+    // const platformScript = await isolate.compileScript(PLATFORM_API_JS);
+    // await platformScript.run(this.context);
 
-    const script = await this.isolate.compileScript(this.config.automationJs);
-    await script.run(this.context);
+    // the hard way:
 
-    const result = await jail.get("foo");
-    if (result) {
-      this.log.debug(`Automation result:\n${JSON.stringify(result)}`);
+    await jail.set("automation", new ivm.ExternalCopy({}).copyInto());
+    const internalPlatformApi = await jail.get("automation");
+    for (const key of Object.keys(platformApi)) {
+      this.log.debug("copying " + key);
+      await internalPlatformApi.set(
+        key,
+        // new ivm.ExternalCopy(platformApi[key]).copyInto(),
+        new ivm.Reference(platformApi[key]),
+      );
     }
+    await jail.set("automation", new ivm.Reference(platformApi));
+
+    // TODO: just gotta figure out how to transfer my silly little objects into the VM
+
+    await userScript.run(this.context); // from before
+
+    this.log.debug("Automation get automation");
+    const result = await jail.get("automation");
+    this.log.debug(`Startup result: ${JSON.stringify(result)}`);
   }
 
   handleVm(data: unknown) {
@@ -164,9 +193,11 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
 
     const result = await this.context.evalClosure(
       `automation.handleMessage($0);`,
-      [message],
+      [new ivm.Reference(message)],
     );
-    this.log.debug(`Automation result: ${JSON.stringify(result)}`);
+    this.log.debug(
+      `Automation handleMessage result: ${JSON.stringify(result)}`,
+    );
   }
 
   connectSocket(): void {
