@@ -33,7 +33,6 @@
   ],
   "dependencies": {
     "@oznu/hap-client": "^1.9.0",
-    "isolated-vm": "^4.7.2",
     "ws": "^8.13.0",
     "zod": "^3.21.4"
   },

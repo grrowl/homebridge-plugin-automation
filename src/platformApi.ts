@@ -1,7 +1,14 @@
 import { type ServiceType } from "./schemas/Service";
 
+type ListenerFn = (data: ServiceType) => void;
+
 export const platformApi = {
   services: [] as ServiceType[],
+  listenerFn: undefined as ListenerFn | undefined,
+
+  listen(fn: ListenerFn) {
+    this.listenerFn = fn;
+  },
 
   handleMessage(message) {
     if (message.type === "deviceStatusChange") {
@@ -11,17 +18,20 @@ export const platformApi = {
       if (service) {
         Object.assign(service, message.data);
       }
-      return global.onMessage(message.data);
+      if (typeof this.listenerFn === "undefined") {
+        throw new Error("listener not defined");
+      }
+      return this.listenerFn(message.data);
     }
     if (message.type === "deviceList") {
       platformApi.services = message.data;
       return platformApi.services.length;
     }
-    return null;
+    return 'Event ignored';
   },
 
   set(serviceId, iid, value) {
-    global.__host({
+    global.__sendMessage({
       version: 1,
       type: "SetCharacteristic",
       data: {
@@ -32,36 +42,3 @@ export const platformApi = {
     });
   },
 };
-
-export const PLATFORM_API_JS = `
-const automation = {
-  services: [],
-
-  handleMessage(message) {
-    if (message.type === "deviceStatusChange") {
-      const service = automation.services.find(
-        (s) => s.uniqueId === message.data.uniqueId,
-      );
-      if (service) {
-        Object.assign(service, message.data);
-      }
-      return global.onMessage(message.data) || 'no reuslt?';
-    }
-    if (message.type === "deviceList") {
-      automation.services = message.data;
-    }
-  },
-
-  set(serviceId, iid, value) {
-    global.__host({
-      version: 1,
-      type: "SetCharacteristic",
-      data: {
-        serviceId,
-        iid,
-        value,
-      },
-    });
-  },
-};
-`;

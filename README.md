@@ -10,18 +10,20 @@ Control your homebridge instance with Javascript.
 (sorry this is so gnarly, we can improve the interface in `PLATFORM_SCRIPT`)
 
 ```js
-function onMessage(event) {
+automation.listen(function (event) {
   if (event.type === "Lightbulb") {
+    // do stuff
   }
   if (event.name === "Book Globe") {
+    // do stuff
   }
-}
+});
 ```
 
 When Dummy Switch is turned on, wait 5 seconds, then turn it Off.
 
 ```js
-function onMessage(event) {
+automation.listen(function (event) {
   if (event.name === "Dummy Switch") {
     const On = event.serviceCharacteristics.find((c) => c.name === "On");
 
@@ -34,13 +36,13 @@ function onMessage(event) {
     return false;
   }
   return null;
-}
+});
 ```
 
 On Motion Sensed (Active), set Globe light to On
 
 ```js
-function onMessage(event) {
+automation.listen(function (event) {
   if (event.name === "Motion Sensor") {
     if (
       event.serviceCharacteristics.find(
@@ -56,7 +58,7 @@ function onMessage(event) {
       }
     }
   }
-}
+});
 ```
 
 ## API

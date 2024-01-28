@@ -12,9 +12,9 @@ import type {
   PlatformAccessory,
   PlatformConfig,
 } from "homebridge";
-import ivm from "isolated-vm";
+import vm from "node:vm";
 import WebSocket from "ws";
-import { PLATFORM_API_JS, platformApi } from "./platformApi";
+import { platformApi } from "./platformApi";
 import { ClientMessage, MetricsData } from "./schemas/ClientMessage";
 import { ServerMessage, ServerMessageSchema } from "./schemas/ServerMessage";
 import { ServiceSchema } from "./schemas/Service";
@@ -33,8 +33,6 @@ const METRIC_DEBOUNCE = 1_500;
 // only reset reconnection backoff once the connection is open for 5 seconds
 const CONNECTION_RESET_DELAY = 5_000;
 
-const VM_MEMORY_LIMIT_MB = 128;
-
 export class HomebridgeAutomation implements DynamicPlatformPlugin {
   private socket?: WebSocket;
   private reconnectAttempts = 0;
@@ -45,8 +43,7 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
   private hapMonitor?: HapMonitor;
   private hapReady = false;
 
-  private isolate: ivm.Isolate | undefined;
-  private context: ivm.Context | undefined;
+  private context: vm.Context | undefined;
 
   private servicesCache: ServiceType[] = [];
 
@@ -81,10 +78,10 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
         process.env.NODE_ENV === "development"
           ? console
           : {
-              log: () => {},
-              error: (e: any) => this.log.error(e),
-              warn: (e: any) => this.log.warn(e),
-            },
+            log: () => { },
+            error: (e: any) => this.log.error(e),
+            warn: (e: any) => this.log.warn(e),
+          },
       config: {
         debug: true,
       },
@@ -111,7 +108,6 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
     this.api.on("shutdown", () => {
       this.log.info("Shutting down");
       this.hapMonitor?.finish();
-      this.isolate?.dispose();
     });
 
     setTimeout(async () => {
@@ -121,12 +117,9 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
 
   // do this async so we don't hold up Homebridge
   async initVm(): Promise<void> {
-    const isolate = new ivm.Isolate({ memoryLimit: VM_MEMORY_LIMIT_MB });
-
-    // Attempt to compile the script early; if it fails, we won't define this.isolate & context
-    let userScript: ivm.Script;
+    let userScript: vm.Script;
     try {
-      userScript = await isolate.compileScript(this.config.automationJs);
+      userScript = new vm.Script(this.config.automationJs);
     } catch (error) {
       this.log.error(
         "Error compiling Automation script:",
@@ -135,49 +128,30 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
       return;
     }
 
-    this.isolate = isolate;
-    this.context = await this.isolate.createContext({});
-    const jail = this.context.global;
+    // only assign once successful
+    this.context = vm.createContext({
+      console: this.log,
+      automation: platformApi,
+      __sendMessage: (data: unknown) => {
+        this.onScriptMessage(data);
+      },
+    });
 
-    await jail.set("global", jail.derefInto());
-    await jail.set(
-      "__host",
-      new ivm.Reference((data) => {
-        this.handleVm(data);
-      }),
-    );
+    const result = userScript.runInContext(this.context); // Running the user script
+    this.log.debug(`User script ran: ${JSON.stringify(result)}`);
 
-    // const platformScript = await isolate.compileScript(PLATFORM_API_JS);
-    // await platformScript.run(this.context);
-
-    // the hard way:
-
-    await jail.set("automation", new ivm.ExternalCopy({}).copyInto());
-    const internalPlatformApi = await jail.get("automation");
-    for (const key of Object.keys(platformApi)) {
-      this.log.debug("copying " + key);
-      await internalPlatformApi.set(
-        key,
-        // new ivm.ExternalCopy(platformApi[key]).copyInto(),
-        new ivm.Reference(platformApi[key]),
-      );
+    const listenerFn = this.context.automation.listenerFn; // Accessing the automation object
+    if (!listenerFn) {
+      // if the user script was "good" this should return a value.
+      this.log.warn('No listener registered');
     }
-    await jail.set("automation", new ivm.Reference(platformApi));
-
-    // TODO: just gotta figure out how to transfer my silly little objects into the VM
-
-    await userScript.run(this.context); // from before
-
-    this.log.debug("Automation get automation");
-    const result = await jail.get("automation");
-    this.log.debug(`Startup result: ${JSON.stringify(result)}`);
   }
 
-  handleVm(data: unknown) {
+  onScriptMessage(data: unknown) {
     const messageParse = ServerMessageSchema.safeParse(data);
     if (!messageParse.success) {
       this.log.error(
-        `Invalid message from VM`,
+        `Invalid message from script`,
         // messageParse.error,
       );
       this.incrementMetric("invalidServerMessages");
@@ -187,17 +161,28 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
   }
 
   async invokeVm(message: ClientMessage) {
-    if (!this.context || !this.isolate) {
+    if (!this.context) {
       return;
     }
 
-    const result = await this.context.evalClosure(
-      `automation.handleMessage($0);`,
-      [new ivm.Reference(message)],
-    );
-    this.log.debug(
-      `Automation handleMessage result: ${JSON.stringify(result)}`,
-    );
+    const script = new vm.Script(`automation.handleMessage(_hostMessage);`);
+    this.context._hostMessage = message;
+
+    try {
+      const result = script.runInContext(this.context);
+
+      this.log.debug(
+        `Automation (${message.type}) result: ${JSON.stringify(
+          result,
+        )}`,
+      );
+    } catch (error) {
+      this.log.error(
+        "Error running Automation script:",
+        String(error).split("\n").pop(),
+      );
+      return;
+    }
   }
 
   connectSocket(): void {
@@ -420,8 +405,7 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
           return false;
         }
         this.log.info(
-          `Set ${service.serviceName}/${service.uniqueId?.substring(0, 3)}: ${
-            characteristic.type
+          `Set ${service.serviceName}/${service.uniqueId?.substring(0, 3)}: ${characteristic.type
           }/${data.iid} to ${data.value}`,
         );
         this.handleCharacteristicAction(
@@ -451,8 +435,7 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
         );
         if (char.value !== expectedValue) {
           this.log.warn(
-            `Set ${char.serviceName} ${char?.type}/${char.iid} to ${
-              char.value
+            `Set ${char.serviceName} ${char?.type}/${char.iid} to ${char.value
             }/${typeof char.value} (expected ${expectedValue}/${typeof expectedValue})`,
           );
           this.incrementMetric("setIneffective");
