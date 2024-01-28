@@ -8,12 +8,12 @@
     "type": "object",
     "properties": {
       "automationJs": {
-        "title": "Automation JS",
+        "title": "Automation script",
         "type": "string",
         "required": false,
-        "placeholder": "function onMessage(event) {}",
-        "default": "function onMessage(event) {}",
-        "description": "Function to run on every change, must be called onEvent. DO NOT ENTER UNTRUSTED CODE."
+        "placeholder": "automation.listen(function (event) { return; })",
+        "default": "automation.listen(function (event) { return; })",
+        "description": "Javascript function. Use automation.listen() to define your callback to run on every device status change. Do not enter untrusted code, as any code entered here will run on your Homebridge instance and is not isolated or sandboxed."
       },
       "pin": {
         "title": "Homebridge PIN",
@@ -23,18 +23,18 @@
         "description": "We'll use this instance's PIN by default"
       },
       "remoteEnabled": {
-        "title": "Remote Control enabled",
+        "title": "Enable Remote Control",
+        "description": "Allows a remote server to control your home via secure websocket connection",
         "type": "boolean",
         "required": true,
-        "default": false,
-        "description": "Connect to websocket control server"
+        "default": false
       },
       "remoteHost": {
         "title": "Remote Control host",
         "type": "string",
         "required": false,
-        "default": "127.0.0.1",
-        "description": "Can be overridden by env UPSTREAM_API (does not apply if enabled is not set)"
+        "default": "",
+        "description": "Can be overridden by env var UPSTREAM_API (does not apply if enabled is not set)"
       },
       "apiKey": {
         "title": "Remote Control API Key",
@@ -47,7 +47,7 @@
         "condition": {
           "functionBody": "false"
         },
-        "description": "(Not yet in use)",
+        "description": "(Not yet in use - filter updates by accessory type)",
         "title": "Disabled Accessory Types",
         "type": "array",
         "uniqueItems": true,
