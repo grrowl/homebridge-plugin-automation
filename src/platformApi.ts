@@ -2,6 +2,10 @@ import { type ServiceType } from "./schemas/Service";
 
 type ListenerFn = (data: ServiceType) => void;
 
+declare global {
+  const __sendMessage: (data: unknown) => void;
+}
+
 export const platformApi = {
   services: [] as ServiceType[],
   listenerFn: undefined as ListenerFn | undefined,
@@ -27,11 +31,11 @@ export const platformApi = {
       platformApi.services = message.data;
       return platformApi.services.length;
     }
-    return 'Event ignored';
+    return "Event ignored";
   },
 
   set(serviceId, iid, value) {
-    global.__sendMessage({
+    __sendMessage({
       version: 1,
       type: "SetCharacteristic",
       data: {
