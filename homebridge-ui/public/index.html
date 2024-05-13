@@ -1,0 +1,192 @@
+<link
+  href="https://cdn.jsdelivr.net/npm/vscode-codicons@0.0.17/dist/codicon.min.css"
+  rel="stylesheet"
+/>
+
+<div>
+  <h1>Homebridge Automation</h1>
+
+  <div id="automationJsEditor" style="min-height: 100px">
+    Loading script editor...
+  </div>
+</div>
+
+<script type="module">
+  // Lazy loaded in initMonaco()
+  // import * as monaco from "https://cdn.jsdelivr.net/npm/monaco-editor@0.48.0/+esm";
+
+  // FIXME: Not working due to CORS issues
+  self.MonacoEnvironment = {
+    getWorkerUrl: function (moduleUrl) {
+      return `https://cdn.jsdelivr.net/npm/${moduleUrl}+esm`;
+    },
+    getWorker: function (_, label) {
+      const getWorkerModule = (moduleUrl, label) => {
+        return new Worker(self.MonacoEnvironment.getWorkerUrl(moduleUrl), {
+          name: label,
+          type: "module",
+        });
+      };
+
+      switch (label) {
+        case "json":
+          return getWorkerModule(
+            "monaco-editor@0.48.0/esm/vs/language/json/json.worker?worker",
+            label,
+          );
+        case "css":
+        case "scss":
+        case "less":
+          return getWorkerModule(
+            "monaco-editor@0.48.0/esm/vs/language/css/css.worker?worker",
+            label,
+          );
+        case "html":
+        case "handlebars":
+        case "razor":
+          return getWorkerModule(
+            "monaco-editor@0.48.0/esm/vs/language/html/html.worker?worker",
+            label,
+          );
+        case "typescript":
+        case "javascript":
+          return getWorkerModule(
+            "monaco-editor@0.48.0/esm/vs/language/typescript/ts.worker?worker",
+            label,
+          );
+        default:
+          return getWorkerModule(
+            "monaco-editor@0.48.0/esm/vs/editor/editor.worker?worker",
+            label,
+          );
+      }
+    },
+  };
+
+  (async () => {
+    const pluginConfig = await homebridge.getPluginConfig();
+    const pluginSchema = await homebridge.getPluginConfigSchema();
+
+    if (pluginConfig.length === 0) {
+      pluginConfig[0] = getDefaults(pluginSchema);
+    }
+
+    // note to pass the whole pluginConfig array to maintain the reference
+
+    initForm(pluginConfig, pluginSchema);
+    initMonaco(pluginConfig, pluginSchema);
+
+    // for some reason this is necessary when no config yet
+    homebridge.updatePluginConfig(pluginConfig);
+  })();
+
+  function getDefaults(pluginConfig) {
+    const defaults = {};
+
+    function extractDefaults(obj) {
+      for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+          if (typeof obj[key] === "object" && obj[key] !== null) {
+            extractDefaults(obj[key]);
+          } else if (key === "default") {
+            defaults[obj.title] = obj[key];
+          }
+        }
+      }
+    }
+
+    extractDefaults(pluginConfig.schema.properties);
+
+    return defaults;
+  }
+
+  function initForm(pluginConfig, _pluginSchema) {
+    homebridge.showSchemaForm();
+
+    // listen for built-in form schema changes
+    window.homebridge.addEventListener("configChanged", (event) => {
+      console.log("Updated config:", event.data);
+
+      // pluginConfig[0].automationJs = event.data.automationJs
+      pluginConfig[0].pin = event.data.pin;
+      pluginConfig[0].remoteEnabled = event.data.remoteEnabled;
+      pluginConfig[0].remoteHost = event.data.remoteHost;
+      pluginConfig[0].apiKey = event.data.apiKey;
+
+      homebridge.updatePluginConfig(pluginConfig);
+    });
+  }
+
+  async function initMonaco(pluginConfig, pluginSchema) {
+    const monaco = await import(
+      "https://cdn.jsdelivr.net/npm/monaco-editor@0.48.0/+esm"
+    );
+
+    const automationJs =
+      pluginConfig[0].automationJs ||
+      pluginSchema.schema.properties.automationJs.default;
+
+    // validation settings
+    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: true,
+      noSyntaxValidation: false,
+    });
+
+    // compiler options
+    monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+      target: monaco.languages.typescript.ScriptTarget.ES2015,
+      allowNonTsExtensions: true,
+    });
+
+    // add automation environment types
+    // FIXME: Not working due to CORS / can't load Typescript Worker
+    monaco.languages.typescript.javascriptDefaults.addExtraLib(libSource);
+
+    const container = document.getElementById("automationJsEditor");
+    container.innerHTML = "";
+
+    // https://microsoft.github.io/monaco-editor/docs.html#interfaces/editor.IStandaloneEditorConstructionOptions.html
+    const editor = monaco.editor.create(container, {
+      value: automationJs,
+      language: "javascript",
+      minimap: {
+        enabled: false,
+      },
+      stickyScroll: {
+        enabled: false,
+      },
+    });
+
+    // autolayout or content sizing is buggy in iframe
+    editor.layout({
+      width: 760,
+      height: 300,
+    });
+
+    editor.onDidChangeModelContent((event) => {
+      pluginConfig[0].automationJs = editor.getValue();
+      homebridge.updatePluginConfig(pluginConfig);
+    });
+  }
+
+  const libSource = `
+    interface ServiceCharacteristic {
+      iid: number;
+      serviceName: string;
+      value: string | number | boolean;
+    }
+
+    interface ListenEvent {
+      serviceName: string;
+      serviceCharacteristics: ServiceCharacteristic[];
+      uniqueId: string;
+    }
+
+    interface Automation {
+      listen(callback: (event: ListenEvent) => void | string | number | boolean | null): void;
+      set(uniqueId: string, iid: number, value: unknown): void;
+    }
+
+    declare const automation: Automation;
+  `;
+</script>

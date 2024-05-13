@@ -1,7 +1,7 @@
 {
   "displayName": "Homebridge Automation",
   "name": "homebridge-automation",
-  "version": "0.2.0",
+  "version": "1.0.0-dev.0",
   "description": "Command and automate your home using Javascript.",
   "license": "Apache-2.0",
   "homepage": "https://tommckenzie.dev/homebridge-automation",
@@ -32,6 +32,7 @@
     "automation"
   ],
   "dependencies": {
+    "@homebridge/plugin-ui-utils": "^1.0.3",
     "@oznu/hap-client": "^1.9.0",
     "ws": "^8.13.0",
     "zod": "^3.21.4"
