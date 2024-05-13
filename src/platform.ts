@@ -78,10 +78,10 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
         process.env.NODE_ENV === "development"
           ? console
           : {
-            log: () => { },
-            error: (e: any) => this.log.error(e),
-            warn: (e: any) => this.log.warn(e),
-          },
+              log: () => {},
+              error: (e: any) => this.log.error(e),
+              warn: (e: any) => this.log.warn(e),
+            },
       config: {
         debug: true,
       },
@@ -125,6 +125,9 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
         "Error compiling Automation script:",
         String(error).split("\n").pop(),
       );
+      if (error instanceof Error) {
+        this.log.debug("Error stack", error.stack);
+      }
       return;
     }
 
@@ -135,6 +138,11 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
       __sendMessage: (data: unknown) => {
         this.onScriptMessage(data);
       },
+      // built-ins
+      setTimeout: setTimeout,
+      clearTimeout: clearTimeout,
+      setInterval: setInterval,
+      clearInterval: clearInterval,
     });
 
     const result = userScript.runInContext(this.context); // Running the user script
@@ -143,7 +151,7 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
     const listenerFn = this.context.automation.listenerFn; // Accessing the automation object
     if (!listenerFn) {
       // if the user script was "good" this should return a value.
-      this.log.warn('No listener registered');
+      this.log.warn("No listener registered");
     }
   }
 
@@ -172,9 +180,7 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
       const result = script.runInContext(this.context);
 
       this.log.debug(
-        `Automation (${message.type}) result: ${JSON.stringify(
-          result,
-        )}`,
+        `Automation (${message.type}) result: ${JSON.stringify(result)}`,
       );
     } catch (error) {
       this.log.error(
@@ -405,7 +411,8 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
           return false;
         }
         this.log.info(
-          `Set ${service.serviceName}/${service.uniqueId?.substring(0, 3)}: ${characteristic.type
+          `Set ${service.serviceName}/${service.uniqueId?.substring(0, 3)}: ${
+            characteristic.type
           }/${data.iid} to ${data.value}`,
         );
         this.handleCharacteristicAction(
@@ -435,7 +442,8 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
         );
         if (char.value !== expectedValue) {
           this.log.warn(
-            `Set ${char.serviceName} ${char?.type}/${char.iid} to ${char.value
+            `Set ${char.serviceName} ${char?.type}/${char.iid} to ${
+              char.value
             }/${typeof char.value} (expected ${expectedValue}/${typeof expectedValue})`,
           );
           this.incrementMetric("setIneffective");
