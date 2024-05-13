@@ -1,21 +1,21 @@
 # homebridge-automation
 
-Control your homebridge instance with Javascript.
+Control and automate your Homebridge instance with Javascript.
 
 > [!WARNING]
 > This plugin is very new, but since it's so useful and unique (no simpler homebridge automation approaches exist) I'm releasing it for constributors, testers, and as a request for feedback.
 
-## Examples
+Any time a device/service status changes, a callback registered at `automation.listen` will fire with an `event` shaped like a (Service)[https://github.com/grrowl/homebridge-plugin-automation/blob/main/src/schemas/Service.ts]. This allows you to build automations without setting up Node-RED or other third-party solutions.
 
-(sorry this is so gnarly, we can improve the interface in `PLATFORM_SCRIPT`)
+## Examples
 
 ```js
 automation.listen(function (event) {
   if (event.type === "Lightbulb") {
-    // do stuff
+    // Some lightbulb changed state
   }
   if (event.serviceName === "Book Globe") {
-    // do stuff
+    // A specific device/service changed state
   }
 });
 ```
@@ -39,17 +39,20 @@ automation.listen(function (event) {
 });
 ```
 
-On Motion Sensed (Active), set Globe light to On
+On Motion sensor updating, check if it's Active, if so, turn on the lamp.
 
 ```js
 automation.listen(function (event) {
-  if (event.serviceName === "Motion Sensor") {
+  if (event.serviceName === "Motion sensor") {
     if (
       event.serviceCharacteristics.find(
-        (c) => c.serviceName === "Active" && c.value === true,
+        (c) => c.type === "MotionDetected" && c.value === 1,
       )
     ) {
-      const light = automation.services.find((s) => s.serviceName === "Globe");
+      // Find the light we want
+      const light = automation.services.find(
+        (s) => s.serviceName === "Tall Lamp",
+      );
       if (light) {
         const on = light.serviceCharacteristics.find((s) => s.type === "On");
         if (on) {
@@ -68,6 +71,16 @@ The `automation` object is available in your function module scope and defined i
 See [`schemas/Service.ts`](https://github.com/grrowl/homebridge-plugin-automation/blob/main/src/schemas/Service.ts) and [`schemas/Characteristic.ts`](https://github.com/grrowl/homebridge-plugin-automation/blob/main/src/schemas/Characteristic.ts).
 
 Your function module scope is preserved between invocations, but is lost on Homebridge restart.
+
+## Troubleshooting
+
+Turn on "Homebridge Debug Mode" to see the return values from your functions in the logs (helpful for debugging).
+
+Homebridge (or the bridge homebridge-automation runs on) needs to be restarted for changes to the automation javascript to take effect.
+
+You might need "Homebridge 'Insecure' Mode (Enable Accessory Control)" enabled.
+
+Note your `serviceName` may not be the same as the Accessory name! Click the gear on your accessory and check the "Name" listed in the table -- that is the true `serviceName` exposed to the automation.
 
 ## Development
 
