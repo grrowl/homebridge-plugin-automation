@@ -1,0 +1,97 @@
+<link
+  href="https://cdn.jsdelivr.net/npm/vscode-codicons@0.0.17/dist/codicon.min.css"
+  rel="stylesheet"
+/>
+
+<div>
+  <h1>Homebridge Automation</h1>
+
+  <div id="automationJsEditor">Loading script editor...</div>
+</div>
+
+<!--
+
+automationJs
+pin
+remoteEnabled
+remoteHost
+apiKey
+
+// TODO: if this holds up the whole form, consider splitting into two script blocks
+-->
+
+<script type="module">
+  import * as monaco from 'https://cdn.jsdelivr.net/npm/monaco-editor@0.48.0/+esm';
+
+  (async () => {
+    const pluginConfig = await homebridge.getPluginConfig();
+
+    // note to pass the whole pluginConfig object so we maintain the reference
+
+    initForm(pluginConfig);
+    initMonaco(pluginConfig);
+  })();
+
+  function initForm(pluginConfig) {
+    homebridge.showSchemaForm();
+
+    // listen for built-in form schema changes
+    window.homebridge.addEventListener('configChanged', (event: MessageEvent) => {
+      console.log('Updated config:', event.data);
+
+      // pluginConfig[0].automationJs = event.data.automationJs
+      pluginConfig[0].pin = event.data.pin
+      pluginConfig[0].remoteEnabled = event.data.remoteEnabled
+      pluginConfig[0].remoteHost = event.data.remoteHost
+      pluginConfig[0].apiKey = event.data.apiKey
+
+      homebridge.updatePluginConfig(pluginConfig);
+    });
+  }
+
+  function initMonaco(pluginConfig) {
+    if (!monaco) {
+      console.warn('Monaco not ready yet')
+      return setTimeout(() => initMonaco(pluginConfig), 1000)
+    }
+
+    // validation settings
+    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: true,
+      noSyntaxValidation: false,
+    });
+
+    // compiler options
+    monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+      target: monaco.languages.typescript.ScriptTarget.ES2015,
+      allowNonTsExtensions: true,
+    });
+
+    // add automation environment types
+    // monaco.editor.createModel(libSource, "typescript", monaco.Uri.parse(libUri));
+
+    const editor = monaco.editor.create(document.getElementById("automationJsEditor"), {
+      value: pluginConfig[0].automationJs,
+      language: "javascript",
+    });
+
+    let debounceTimer;
+    editor.onDidChangeModelContent((event) => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        pluginConfig[0].automationJs = editor.getValue();
+        homebridge.updatePluginConfig(pluginConfig);
+      }, 300);
+    })
+  }
+
+  // var libSource = [
+  //   "declare class Facts {",
+  //   "    /**",
+  //   "     * Returns the next fact",
+  //   "     */",
+  //   "    static next():string",
+  //   "}",
+  // ].join("\n");
+  // var libUri = "ts:filename/facts.d.ts";
+</script>

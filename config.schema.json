@@ -2,6 +2,7 @@
   "pluginAlias": "HomebridgeAutomation",
   "pluginType": "platform",
   "singular": true,
+  "customUi": true,
   "headerDisplay": "Homebridge Automation settings",
   "footerDisplay": "",
   "schema": {
@@ -30,11 +31,11 @@
         "default": false
       },
       "remoteHost": {
-        "title": "Remote Control host",
+        "title": "Remote Control Host",
         "type": "string",
         "required": false,
         "default": "",
-        "description": "Can be overridden by env var UPSTREAM_API (does not apply if enabled is not set)"
+        "description": "Can be overridden by env var UPSTREAM_API (does not apply if remoteEnabled is not set)"
       },
       "apiKey": {
         "title": "Remote Control API Key",
@@ -42,35 +43,6 @@
         "required": false,
         "default": "",
         "description": ""
-      },
-      "disabled_modes": {
-        "condition": {
-          "functionBody": "false"
-        },
-        "description": "(Not yet in use - filter updates by accessory type)",
-        "title": "Disabled Accessory Types",
-        "type": "array",
-        "uniqueItems": true,
-        "items": {
-          "title": "Disabled Types",
-          "type": "string",
-          "enum": [
-            "BatteryService",
-            "InputSource",
-            "Lightbulb",
-            "LightSensor",
-            "MotionSensor",
-            "Outlet",
-            "ProtocolInformation",
-            "ServiceLabel",
-            "Speaker",
-            "StatelessProgrammableSwitch",
-            "Switch",
-            "Television",
-            "TemperatureSensor",
-            "Thermostat"
-          ]
-        }
       }
     }
   }

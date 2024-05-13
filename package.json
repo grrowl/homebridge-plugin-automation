@@ -32,6 +32,7 @@
     "automation"
   ],
   "dependencies": {
+    "@homebridge/plugin-ui-utils": "^1.0.3",
     "@oznu/hap-client": "^1.9.0",
     "ws": "^8.13.0",
     "zod": "^3.21.4"
