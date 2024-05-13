@@ -14,7 +14,7 @@ import type {
 } from "homebridge";
 import vm from "node:vm";
 import WebSocket from "ws";
-import { platformApi } from "./platformApi";
+import { PlatformApi } from "./platformApi";
 import { ClientMessage, MetricsData } from "./schemas/ClientMessage";
 import { ServerMessage, ServerMessageSchema } from "./schemas/ServerMessage";
 import { ServiceSchema } from "./schemas/Service";
@@ -131,13 +131,12 @@ export class HomebridgeAutomation implements DynamicPlatformPlugin {
       return;
     }
 
+    const platformApi = new PlatformApi((data) => this.onScriptMessage(data));
+
     // only assign once successful
     this.context = vm.createContext({
       console: this.log,
       automation: platformApi,
-      __sendMessage: (data: unknown) => {
-        this.onScriptMessage(data);
-      },
       // built-ins
       setTimeout: setTimeout,
       clearTimeout: clearTimeout,

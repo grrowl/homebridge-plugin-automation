@@ -1,22 +1,25 @@
 import { type ServiceType } from "./schemas/Service";
+import { type ServerMessage } from "./schemas/ServerMessage";
 
 type ListenerFn = (data: ServiceType) => void;
+type SendFn = (data: ServerMessage) => void;
 
-declare global {
-  const __sendMessage: (data: unknown) => void;
-}
+export class PlatformApi {
+  private services: ServiceType[] = [];
+  private listenerFn?: ListenerFn;
+  private sendFn: SendFn;
 
-export const platformApi = {
-  services: [] as ServiceType[],
-  listenerFn: undefined as ListenerFn | undefined,
+  constructor(sendFn: SendFn) {
+    this.sendFn = sendFn;
+  }
 
   listen(fn: ListenerFn) {
     this.listenerFn = fn;
-  },
+  }
 
   handleMessage(message) {
     if (message.type === "deviceStatusChange") {
-      const service = platformApi.services.find(
+      const service = this.services.find(
         (s) => s.uniqueId === message.data.uniqueId,
       );
       if (service) {
@@ -28,14 +31,14 @@ export const platformApi = {
       return this.listenerFn(message.data);
     }
     if (message.type === "deviceList") {
-      platformApi.services = message.data;
-      return platformApi.services.length;
+      this.services = message.data;
+      return this.services.length;
     }
     return "Event ignored";
-  },
+  }
 
   set(serviceId, iid, value) {
-    __sendMessage({
+    this.sendFn({
       version: 1,
       type: "SetCharacteristic",
       data: {
@@ -44,5 +47,5 @@ export const platformApi = {
         value,
       },
     });
-  },
-};
+  }
+}
