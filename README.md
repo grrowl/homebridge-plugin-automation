@@ -14,7 +14,7 @@ automation.listen(function (event) {
   if (event.type === "Lightbulb") {
     // do stuff
   }
-  if (event.name === "Book Globe") {
+  if (event.serviceName === "Book Globe") {
     // do stuff
   }
 });
@@ -24,8 +24,8 @@ When Dummy Switch is turned on, wait 5 seconds, then turn it Off.
 
 ```js
 automation.listen(function (event) {
-  if (event.name === "Dummy Switch") {
-    const On = event.serviceCharacteristics.find((c) => c.name === "On");
+  if (event.serviceName === "Dummy Switch") {
+    const On = event.serviceCharacteristics.find((c) => c.serviceName === "On");
 
     if (On && On.value === 1) {
       setTimeout(function () {
@@ -43,13 +43,13 @@ On Motion Sensed (Active), set Globe light to On
 
 ```js
 automation.listen(function (event) {
-  if (event.name === "Motion Sensor") {
+  if (event.serviceName === "Motion Sensor") {
     if (
       event.serviceCharacteristics.find(
-        (c) => c.name === "Active" && c.value === true,
+        (c) => c.serviceName === "Active" && c.value === true,
       )
     ) {
-      const light = automation.services.find((s) => s.name === "Globe");
+      const light = automation.services.find((s) => s.serviceName === "Globe");
       if (light) {
         const on = light.serviceCharacteristics.find((s) => s.type === "On");
         if (on) {
