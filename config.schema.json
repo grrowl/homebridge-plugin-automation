@@ -11,9 +11,12 @@
       "automationJs": {
         "title": "Automation script",
         "type": "string",
+        "condition": {
+          "functionBody": "return false;"
+        },
         "required": false,
         "placeholder": "automation.listen(function (event) { return; })",
-        "default": "automation.listen(function (event) { return; })",
+        "default": "automation.listen(function (event) {\n\treturn;\n})",
         "description": "Javascript function. Use automation.listen() to define your callback to run on every device status change. Do not enter untrusted code, as any code entered here will run on your Homebridge instance and is not isolated or sandboxed."
       },
       "pin": {
